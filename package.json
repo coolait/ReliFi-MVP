@@ -1,0 +1,16 @@
+{
+  "name": "relifi-mvp",
+  "version": "1.0.0",
+  "description": "ReliFi MVP - Gig work scheduling platform",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node index.js",
+    "client": "cd client && npm start",
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
+    "concurrently": "^8.2.2"
+  }
+}
