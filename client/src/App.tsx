@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Calendar from './components/Calendar';
 import SidePanel from './components/SidePanel';
 import Header from './components/Header';
+import ComingSoonPage from './components/ComingSoonPage';
+import ShiftsPage from './components/ShiftsPage';
 
 export interface GigOpportunity {
   service: string;
@@ -25,7 +28,53 @@ export interface BookedShift {
   color: string;
 }
 
+// Main App component with routing
 function App() {
+  return (
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <Routes>
+          <Route path="/" element={<ShiftsPageWrapper />} />
+          <Route path="/shifts" element={<ShiftsPageWrapper />} />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ComingSoonPage 
+                featureDescription="Get a quick overview of your gig activity and earnings in one place."
+                estimatedLaunch="December 2025"
+                feedbackUrl="https://forms.gle/eookpghf5diFseE46"
+              />
+            } 
+          />
+          <Route 
+            path="/analytics" 
+            element={
+              <ComingSoonPage 
+                featureDescription="Dive deep into your performance trends and insights."
+                estimatedLaunch="December 2025"
+                feedbackUrl="https://forms.gle/eookpghf5diFseE46"
+              />
+            } 
+          />
+          <Route 
+            path="/reports" 
+            element={
+              <ComingSoonPage 
+                featureDescription="Generate and export detailed reports of your work."
+                estimatedLaunch="December 2025"
+                feedbackUrl="https://forms.gle/eookpghf5diFseE46"
+              />
+            } 
+          />
+        </Routes>
+      </div>
+    </Router>
+  );
+}
+
+// Wrapper component for ShiftsPage with state management
+function ShiftsPageWrapper() {
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [bookedShiftsByWeek, setBookedShiftsByWeek] = useState<Map<string, Map<string, BookedShift>>>(new Map());
@@ -119,28 +168,17 @@ function App() {
   const weeklyEarnings = calculateWeeklyEarnings();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-      <div className="flex">
-        <div className="flex-1">
-          <Calendar 
-            onSlotClick={handleSlotClick}
-            bookedShifts={getCurrentWeekShifts()}
-            selectedSlotKey={selectedSlotKey}
-            currentWeek={currentWeek}
-            onWeekChange={handleWeekChange}
-            onDeleteShift={handleDeleteShift}
-            weeklyEarnings={weeklyEarnings}
-          />
-        </div>
-        {selectedSlot && (
-          <SidePanel 
-            selectedSlot={selectedSlot}
-            onBookSlot={handleBookSlot}
-          />
-        )}
-      </div>
-    </div>
+    <ShiftsPage
+      onSlotClick={handleSlotClick}
+      bookedShifts={getCurrentWeekShifts()}
+      selectedSlotKey={selectedSlotKey}
+      currentWeek={currentWeek}
+      onWeekChange={handleWeekChange}
+      onDeleteShift={handleDeleteShift}
+      weeklyEarnings={weeklyEarnings}
+      selectedSlot={selectedSlot}
+      onBookSlot={handleBookSlot}
+    />
   );
 }
 
