@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GigOpportunity, BookedShift } from '../App';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 
 interface CalendarProps {
   onSlotClick: (day: string, hour: string, recommendations: GigOpportunity[]) => void;
@@ -40,7 +41,8 @@ const Calendar: React.FC<CalendarProps> = ({
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/recommendations/${day.toLowerCase()}/${hour}`);
+      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}`;
+      const response = await fetch(url);
       const data = await response.json();
       onSlotClick(day, hour.toString(), data.recommendations);
     } catch (error) {
@@ -60,7 +62,7 @@ const Calendar: React.FC<CalendarProps> = ({
   const getBookedShift = (day: string, hour: number): BookedShift | null => {
     const entries = Array.from(bookedShifts.entries());
     for (let i = 0; i < entries.length; i++) {
-      const [key, shift] = entries[i];
+      const [, shift] = entries[i];
       if (shift.day === day && shift.hour === hour.toString()) {
         return shift;
       }

@@ -7,11 +7,16 @@
     "start": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd server && node index.js",
     "client": "cd client && npm start",
-    "install-all": "npm install && cd client && npm install && cd ../server && npm install"
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install",
+    "build": "cd client && npm run build",
+    "vercel-build": "cd client && npm install && npm run build"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@vercel/node": "^5.3.26"
   },
   "dependencies": {
     "firebase": "^12.3.0"
