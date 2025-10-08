@@ -1,5 +1,6 @@
 import React from 'react';
 import { SelectedSlot } from '../App';
+import { trackGcalClick, testFirebaseConnection } from '../services/analyticsService';
 
 interface SidePanelProps {
   selectedSlot: SelectedSlot;
@@ -106,7 +107,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
                   Add to My Schedule
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    // Track the click in Firebase
+                    await trackGcalClick(opportunity.service, day, hour);
+                    
                     const startDate = new Date();
                     const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(day.toLowerCase());
                     const currentDay = new Date().getDay();
@@ -138,6 +142,19 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
 
         <div className="mt-6 text-xs text-gray-500 text-center">
           Note: Recommendations are based on historical data and may vary.
+        </div>
+        
+        {/* Debug Firebase Connection Button */}
+        <div className="mt-4">
+          <button
+            onClick={async () => {
+              console.log('🧪 Testing Firebase connection...');
+              await testFirebaseConnection();
+            }}
+            className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-600 transition-colors text-sm"
+          >
+            🧪 Test Firebase Connection
+          </button>
         </div>
       </div>
     </div>
