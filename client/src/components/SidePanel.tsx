@@ -142,7 +142,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
         </div>
         
         {/* Debug Firebase Connection Button */}
-        <div className="mt-4">
+        {/* <div className="mt-4">
           <button
             onClick={async () => {
               console.log('🧪 Testing Firebase connection...');
@@ -152,7 +152,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
           >
             🧪 Test Firebase Connection
           </button>
-        </div>
+        </div> */}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
   console.log('🔥 Firebase: Starting to track click...', { service, day, hour });
   
   try {
-    const docRef = doc(db, 'Gcal Clicks', 'click-stats');
+    const docRef = doc(db, 'Clicks Across', 'Gcal Clicks');
     console.log('🔥 Firebase: Document reference created');
     
     const docSnap = await getDoc(docRef);
