@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-// Your Firebase configuration
-// Replace these values with your actual Firebase project credentials
+// Client-side Firebase SDK only – do NOT use firebase-admin in the browser
+// Admin access should be used on the server (e.g., Vercel functions)
+
 const firebaseConfig = {
     apiKey: "AIzaSyAqEHJ_pPJ6kKM-HLpmWtGQj1foUoybeGs",
     authDomain: "relifi.firebaseapp.com",
