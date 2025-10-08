@@ -101,7 +101,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
                 onClick={() => onBookSlot(day, hour, opportunity)}
                 className="w-full bg-uber-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors"
               >
-                Add to My Schedule
+                Add to Your Schedule
               </button>
                 <button
                   onClick={async () => {
