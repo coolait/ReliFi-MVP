@@ -143,6 +143,15 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
         
         {/* Debug Firebase Connection Button */}
         <div className="mt-4">
+          <button
+            onClick={async () => {
+              console.log('🧪 Testing Firebase connection...');
+              await testFirebaseConnection();
+            }}
+            className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-600 transition-colors text-sm"
+          >
+            🧪 Test Firebase Connection
+          </button>
         </div>
       </div>
     </div>
