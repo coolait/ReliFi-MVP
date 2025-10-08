@@ -21,11 +21,11 @@ const Header: React.FC = () => {
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center">
               <img
-                src="/brand-logo.png"
-                alt="ReliFi logo"
+                src="/logo192.png"
+                alt="Revly logo"
                 className="w-8 h-8 mr-3 object-contain"
               />
-              <span className="text-xl font-bold text-gray-900">ReliFi</span>
+              <span className="text-xl font-bold text-gray-900">Revly</span>
             </div>
           </div>
 

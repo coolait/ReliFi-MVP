@@ -25,11 +25,11 @@ const ComingSoonPage: React.FC<ComingSoonPageProps> = ({
         <div className="mb-8">
           <div className="flex items-center justify-center mb-4">
             <img
-              src="/brand-logo.png"
-              alt="ReliFi logo"
+              src="/logo192.png"
+              alt="Revly logo"
               className="w-12 h-12 mr-3 object-contain"
             />
-            <span className="text-3xl font-bold text-gray-900">ReliFi</span>
+            <span className="text-3xl font-bold text-gray-900">Revly</span>
           </div>
         </div>
 
