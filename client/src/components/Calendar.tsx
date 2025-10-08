@@ -62,7 +62,7 @@ const Calendar: React.FC<CalendarProps> = ({
   const getBookedShift = (day: string, hour: number): BookedShift | null => {
     const entries = Array.from(bookedShifts.entries());
     for (let i = 0; i < entries.length; i++) {
-      const [key, shift] = entries[i];
+      const [, shift] = entries[i];
       if (shift.day === day && shift.hour === hour.toString()) {
         return shift;
       }
