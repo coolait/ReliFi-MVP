@@ -1,13 +1,26 @@
 import React, { useState } from 'react';
-import { GigOpportunity } from '../App';
+import { GigOpportunity, BookedShift } from '../App';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 
 interface CalendarProps {
   onSlotClick: (day: string, hour: string, recommendations: GigOpportunity[]) => void;
-  bookedSlots: Set<string>;
+  bookedShifts: Map<string, BookedShift>;
+  selectedSlotKey: string | null;
+  currentWeek: Date;
+  onWeekChange: (newWeek: Date) => void;
+  onDeleteShift: (shiftKey: string) => void;
+  weeklyEarnings: { min: number; max: number };
 }
 
-const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+const Calendar: React.FC<CalendarProps> = ({ 
+  onSlotClick, 
+  bookedShifts, 
+  selectedSlotKey, 
+  currentWeek, 
+  onWeekChange, 
+  onDeleteShift,
+  weeklyEarnings 
+}) => {
   const [loading, setLoading] = useState(false);
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -28,7 +41,8 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/recommendations/${day.toLowerCase()}/${hour}`);
+      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}`;
+      const response = await fetch(url);
       const data = await response.json();
       onSlotClick(day, hour.toString(), data.recommendations);
     } catch (error) {
@@ -45,8 +59,26 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
     }
   };
 
-  const isSlotBooked = (day: string, hour: number) => {
-    return Array.from(bookedSlots).some(slot => slot.startsWith(`${day}-${hour}`));
+  const getBookedShift = (day: string, hour: number): BookedShift | null => {
+    const entries = Array.from(bookedShifts.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [, shift] = entries[i];
+      if (shift.day === day && shift.hour === hour.toString()) {
+        return shift;
+      }
+    }
+    return null;
+  };
+
+  const getShiftKey = (day: string, hour: number): string | null => {
+    const entries = Array.from(bookedShifts.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [key, shift] = entries[i];
+      if (shift.day === day && shift.hour === hour.toString()) {
+        return key;
+      }
+    }
+    return null;
   };
 
   const formatHour = (hour: number) => {
@@ -60,13 +92,32 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const handleWeekNavigation = (direction: 'prev' | 'next') => {
+    const newWeek = new Date(currentWeek);
+    if (direction === 'prev') {
+      newWeek.setDate(currentWeek.getDate() - 7);
+    } else {
+      newWeek.setDate(currentWeek.getDate() + 7);
+    }
+    onWeekChange(newWeek);
+  };
+
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Weekly Shift Recommendations</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold text-gray-900">Weekly Shift Recommendations</h1>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2">
+            <div className="text-sm text-gray-500">Projected Weekly Earnings</div>
+            <div className="text-lg font-bold text-uber-blue">
+              ${weeklyEarnings.min}–${weeklyEarnings.max}
+            </div>
+          </div>
+        </div>
+        
         <div className="flex items-center justify-center space-x-4">
           <button
-            onClick={() => setCurrentWeek(new Date(currentWeek.getTime() - 7 * 24 * 60 * 60 * 1000))}
+            onClick={() => handleWeekNavigation('prev')}
             className="p-2 hover:bg-gray-100 rounded-full"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -77,7 +128,7 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
             {weekDates[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
           </span>
           <button
-            onClick={() => setCurrentWeek(new Date(currentWeek.getTime() + 7 * 24 * 60 * 60 * 1000))}
+            onClick={() => handleWeekNavigation('next')}
             className="p-2 hover:bg-gray-100 rounded-full"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,13 +162,20 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
               {/* Day slots */}
               {weekDates.map((date, dayIndex) => {
                 const dayName = days[dayIndex];
-                const isBooked = isSlotBooked(dayName, hour);
+                const slotKey = `${dayName}-${hour}`;
+                const isSelected = selectedSlotKey === slotKey;
+                const bookedShift = getBookedShift(dayName, hour);
+                const shiftKey = getShiftKey(dayName, hour);
                 
                 return (
                   <div
                     key={`${dayIndex}-${hour}`}
-                    className={`border-r border-gray-200 border-t border-gray-200 h-12 cursor-pointer hover:bg-blue-50 transition-colors ${
-                      isBooked ? 'bg-green-100' : 'bg-white'
+                    className={`border-r border-gray-200 border-t border-gray-200 h-12 cursor-pointer transition-colors relative ${
+                      bookedShift 
+                        ? 'bg-green-100 hover:bg-green-200' 
+                        : isSelected 
+                          ? 'bg-blue-100 hover:bg-blue-200' 
+                          : 'bg-white hover:bg-blue-50'
                     }`}
                     onClick={() => handleSlotClick(dayName, hour)}
                   >
@@ -126,9 +184,26 @@ const Calendar: React.FC<CalendarProps> = ({ onSlotClick, bookedSlots }) => {
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-uber-blue"></div>
                       </div>
                     )}
-                    {isBooked && !loading && (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    
+                    {bookedShift && !loading && (
+                      <div className="h-full flex flex-col justify-center p-1">
+                        <div className="text-xs font-medium text-gray-900 truncate">
+                          {bookedShift.service}
+                        </div>
+                        <div className="text-xs text-gray-600 truncate">
+                          {bookedShift.earnings}
+                        </div>
+                        {shiftKey && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteShift(shiftKey);
+                            }}
+                            className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs rounded-full hover:bg-red-600 flex items-center justify-center"
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

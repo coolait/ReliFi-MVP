@@ -4,7 +4,7 @@ import { trackGcalClick, testFirebaseConnection } from '../services/analyticsSer
 
 interface SidePanelProps {
   selectedSlot: SelectedSlot;
-  onBookSlot: (day: string, hour: string, service: string) => void;
+  onBookSlot: (day: string, hour: string, opportunity: any) => void;
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
@@ -94,18 +94,15 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
                     style={{ width: `${Math.random() * 40 + 60}%` }}
                   ></div>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  High demand expected due to evening events.
-                </div>
               </div>
 
               <div className="flex gap-2">
-                <button
-                  onClick={() => onBookSlot(day, hour, opportunity.service)}
-                  className="flex-1 bg-uber-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors"
-                >
-                  Add to My Schedule
-                </button>
+              <button
+                onClick={() => onBookSlot(day, hour, opportunity)}
+                className="w-full bg-uber-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors"
+              >
+                Add to Your Schedule
+              </button>
                 <button
                   onClick={async () => {
                     // Track the click in Firebase
