@@ -2,16 +2,7 @@
   "version": 2,
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/build",
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node"
-    }
-  },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
     {
       "source": "/(.*)",
       "destination": "/$1"
