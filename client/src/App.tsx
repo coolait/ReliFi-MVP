@@ -96,12 +96,21 @@ function App() {
     const shifts = Array.from(currentWeekShifts.values());
     for (let i = 0; i < shifts.length; i++) {
       const shift = shifts[i];
-      const earningsRange = shift.earnings.replace('$', '').replace(/\s/g, '');
-      const [minStr, maxStr] = earningsRange.split('–');
-      const min = parseInt(minStr) || 0;
-      const max = parseInt(maxStr) || min;
-      totalMin += min;
-      totalMax += max;
+      // Parse earnings range like "$35 - $45" or "$25 – $35"
+      const earningsRange = shift.earnings.replace(/\$/g, '').replace(/\s/g, '');
+      const parts = earningsRange.split(/[–-]/);
+      
+      if (parts.length === 2) {
+        const min = parseInt(parts[0]) || 0;
+        const max = parseInt(parts[1]) || min;
+        totalMin += min;
+        totalMax += max;
+      } else {
+        // Fallback if format is unexpected
+        const singleValue = parseInt(earningsRange) || 0;
+        totalMin += singleValue;
+        totalMax += singleValue;
+      }
     }
 
     return { min: totalMin, max: totalMax };
