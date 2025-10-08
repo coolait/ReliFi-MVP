@@ -97,12 +97,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
               </div>
 
               <div className="flex gap-2">
-                <button
-                  onClick={() => onBookSlot(day, hour, opportunity.service)}
-                  className="flex-1 bg-uber-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors"
-                >
-                  Add to My Schedule
-                </button>
+              <button
+                onClick={() => onBookSlot(day, hour, opportunity)}
+                className="w-full bg-uber-blue text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors"
+              >
+                Add to My Schedule
+              </button>
                 <button
                   onClick={async () => {
                     // Track the click in Firebase
