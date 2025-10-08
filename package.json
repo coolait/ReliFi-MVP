@@ -17,5 +17,8 @@
   },
   "dependencies": {
     "@vercel/node": "^5.3.26"
+  },
+  "dependencies": {
+    "firebase": "^12.3.0"
   }
 }

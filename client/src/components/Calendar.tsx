@@ -110,7 +110,7 @@ const Calendar: React.FC<CalendarProps> = ({
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2">
             <div className="text-sm text-gray-500">Projected Weekly Earnings</div>
             <div className="text-lg font-bold text-uber-blue">
-              ${weeklyEarnings.min}–${weeklyEarnings.max}
+              ${weeklyEarnings.min} – ${weeklyEarnings.max}
             </div>
           </div>
         </div>
