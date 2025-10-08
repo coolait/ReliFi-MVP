@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 // Admin access should be used on the server (e.g., Vercel functions)
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAqEHJ_pPJ6kKM-HLpmWtGQj1foUoybeGs",
-    authDomain: "relifi.firebaseapp.com",
-    projectId: "relifi",
-    storageBucket: "relifi.firebasestorage.app",
-    messagingSenderId: "645555164041",
-    appId: "1:645555164041:web:4a66bc0379bce346f1c758",
-    measurementId: "G-5YVYKV5PXD"
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY as string,
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN as string,
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID as string,
+    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET as string,
+    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID as string,
+    appId: process.env.REACT_APP_FIREBASE_APP_ID as string,
+    measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID as string
   }
 
 // Initialize Firebase
