@@ -13,5 +13,6 @@ export const API_BASE_URL = getApiBaseUrl();
 
 export const API_ENDPOINTS = {
   recommendations: (day: string, hour: string) => `/api/recommendations/${day}/${hour}`,
-  health: '/api/health'
+  health: '/api/health',
+  test: '/api/test'
 };

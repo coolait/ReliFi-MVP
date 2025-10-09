@@ -41,12 +41,22 @@ const Calendar: React.FC<CalendarProps> = ({
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}`;
+      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}?t=${Date.now()}`;
+      console.log('🔍 API Call:', { url, day, hour });
       const response = await fetch(url);
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log('✅ API Data received:', data);
       onSlotClick(day, hour.toString(), data.recommendations);
     } catch (error) {
-      console.error('Error fetching recommendations:', error);
+      console.error('❌ Error fetching recommendations:', error);
+      console.log('🔄 Using fallback mock data for hour:', hour);
+      
       // Fallback mock data with proper time formatting
       const formatTime = (h: number) => {
         if (h === 0) return '12:00 AM';
@@ -60,6 +70,7 @@ const Calendar: React.FC<CalendarProps> = ({
         { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#4285F4' },
         { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700' }
       ];
+      console.log('🎭 Mock recommendations:', mockRecommendations);
       onSlotClick(day, hour.toString(), mockRecommendations);
     } finally {
       setLoading(false);
@@ -114,10 +125,30 @@ const Calendar: React.FC<CalendarProps> = ({
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-gray-900">Weekly Shift Recommendations</h1>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2">
-            <div className="text-sm text-gray-500">Projected Weekly Earnings</div>
-            <div className="text-lg font-bold text-uber-blue">
-              ${weeklyEarnings.min} – ${weeklyEarnings.max}
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={async () => {
+                try {
+                  const testUrl = `${API_BASE_URL}/api/test`;
+                  console.log('🧪 Testing API:', testUrl);
+                  const response = await fetch(testUrl);
+                  const data = await response.json();
+                  console.log('✅ API Test Result:', data);
+                  alert(`API Test: ${data.message}`);
+                } catch (error) {
+                  console.error('❌ API Test Failed:', error);
+                  alert('API Test Failed - Check console for details');
+                }
+              }}
+              className="bg-green-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600 transition-colors"
+            >
+              🧪 Test API
+            </button>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2">
+              <div className="text-sm text-gray-500">Projected Weekly Earnings</div>
+              <div className="text-lg font-bold text-uber-blue">
+                ${weeklyEarnings.min} – ${weeklyEarnings.max}
+              </div>
             </div>
           </div>
         </div>
