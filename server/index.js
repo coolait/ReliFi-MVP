@@ -109,7 +109,8 @@ const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 
 const allDaysData = {};
 
 days.forEach(day => {
-  allDaysData[day] = mockGigData.monday; // Using Monday data as template for all days
+    allDaysData[day] = JSON.parse(JSON.stringify(mockGigData.monday));
+  // allDaysData[day] = mockGigData.monday; // Using Monday data as template for all days
 });
 
 // API Routes
