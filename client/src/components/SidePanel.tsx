@@ -152,14 +152,14 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
           >
             🧪 Test Firebase Connection
           </button>
-          <button
+          {/* <button
             onClick={() => {
               resetSessionTracking();
             }}
             className="w-full bg-orange-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-600 transition-colors text-sm"
           >
             🔄 Reset Session Tracking
-          </button>
+          </button> */}
         </div>
       </div>
     </div>
