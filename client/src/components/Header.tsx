@@ -20,10 +20,12 @@ const Header: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center">
-              <div className="w-8 h-8 bg-uber-blue rounded flex items-center justify-center mr-3">
-                <div className="w-4 h-4 bg-white rounded-sm"></div>
-              </div>
-              <span className="text-xl font-bold text-gray-900">ReliFi</span>
+              <img
+                src="/logo192.png"
+                alt="Revly logo"
+                className="w-8 h-8 mr-3 object-contain"
+              />
+              <span className="text-xl font-bold text-gray-900">Revly</span>
             </div>
           </div>
 
