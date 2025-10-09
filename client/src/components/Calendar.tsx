@@ -47,11 +47,18 @@ const Calendar: React.FC<CalendarProps> = ({
       onSlotClick(day, hour.toString(), data.recommendations);
     } catch (error) {
       console.error('Error fetching recommendations:', error);
-      // Fallback mock data
+      // Fallback mock data with proper time formatting
+      const formatTime = (h: number) => {
+        if (h === 0) return '12:00 AM';
+        if (h < 12) return `${h}:00 AM`;
+        if (h === 12) return '12:00 PM';
+        return `${h - 12}:00 PM`;
+      };
+      
       const mockRecommendations: GigOpportunity[] = [
-        { service: 'Uber', startTime: `${hour}:00 AM`, endTime: `${hour + 1}:00 AM`, projectedEarnings: '$25 - $35', color: '#4285F4' },
-        { service: 'Lyft', startTime: `${hour}:00 AM`, endTime: `${hour + 1}:00 AM`, projectedEarnings: '$22 - $32', color: '#4285F4' },
-        { service: 'DoorDash', startTime: `${hour}:00 AM`, endTime: `${hour + 1}:00 AM`, projectedEarnings: '$18 - $28', color: '#FFD700' }
+        { service: 'Uber', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$25 - $35', color: '#4285F4' },
+        { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#4285F4' },
+        { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700' }
       ];
       onSlotClick(day, hour.toString(), mockRecommendations);
     } finally {
