@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Calendar from './components/Calendar';
 import SidePanel from './components/SidePanel';
@@ -30,6 +30,13 @@ export interface BookedShift {
 
 // Main App component with routing
 function App() {
+  // Clear session tracking on page load
+  useEffect(() => {
+    const sessionKey = 'gcal-click-tracked';
+    sessionStorage.removeItem(sessionKey);
+    console.log('🔄 Page loaded - session tracking cleared');
+  }, []);
+
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">

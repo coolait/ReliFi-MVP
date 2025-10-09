@@ -17,6 +17,18 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
     const docSnap = await getDoc(docRef);
     console.log('🔥 Firebase: Document snapshot retrieved', { exists: docSnap.exists() });
 
+    // Check if this is a new user session (first click this page load)
+    const sessionKey = 'gcal-click-tracked';
+    const hasClickedThisSession = sessionStorage.getItem(sessionKey);
+    const isNewSession = !hasClickedThisSession;
+    
+    console.log('🔥 Firebase: Session check:', { 
+      sessionKey, 
+      hasClickedThisSession,
+      isNewSession,
+      sessionStorageAvailable: typeof sessionStorage !== 'undefined'
+    });
+    
     if (docSnap.exists()) {
       // Document exists, update the count
       const currentData = docSnap.data();
@@ -24,12 +36,15 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
       
       const currentClickCount = currentData.clickCount || 0;
       const currentTotalClicks = currentData.totalClicks || 0;
-      const newCount = currentClickCount + 1;
-      const newTotalClicks = currentTotalClicks + 1;
+      
+      // Only increment clickCount for new user sessions
+      const newCount = isNewSession ? currentClickCount + 1 : currentClickCount;
+      const newTotalClicks = currentTotalClicks + 1; // Always increment totalClicks
       
       console.log('🔥 Firebase: Updating with new values:', { 
         newCount, 
         newTotalClicks, 
+        isNewSession,
         service, 
         day, 
         hour 
@@ -44,7 +59,12 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
         lastHour: hour
       });
       
-      console.log('✅ Firebase: Google Calendar click tracked successfully. Total clicks:', newCount);
+      // Mark this session as tracked
+      if (isNewSession) {
+        sessionStorage.setItem(sessionKey, 'true');
+      }
+      
+      console.log('✅ Firebase: Google Calendar click tracked successfully. Total clicks:', newTotalClicks, 'Session clicks:', newCount);
     } else {
       // Document doesn't exist, create it
       console.log('🔥 Firebase: Document does not exist, creating new one');
@@ -58,6 +78,9 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
         lastHour: hour,
         createdAt: serverTimestamp()
       });
+      
+      // Mark this session as tracked
+      sessionStorage.setItem(sessionKey, 'true');
       
       console.log('✅ Firebase: Google Calendar click tracking initialized. First click recorded.');
     }
@@ -73,7 +96,7 @@ export const trackGcalClick = async (service: string, day: string, hour: string)
 
 export const getGcalClickStats = async (): Promise<GcalClickData | null> => {
   try {
-    const docRef = doc(db, 'Gcal Clicks', 'click-stats');
+    const docRef = doc(db, 'Clicks Across', 'Gcal Clicks');
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -90,7 +113,7 @@ export const getGcalClickStats = async (): Promise<GcalClickData | null> => {
 export const testFirebaseConnection = async () => {
   console.log('🔥 Firebase: Testing connection...');
   try {
-    const docRef = doc(db, 'Gcal Clicks', 'click-stats');
+    const docRef = doc(db, 'Clicks Across', 'Gcal Clicks');
     const docSnap = await getDoc(docRef);
     console.log('✅ Firebase: Connection successful!', { exists: docSnap.exists() });
     return true;
@@ -98,4 +121,11 @@ export const testFirebaseConnection = async () => {
     console.error('❌ Firebase: Connection failed:', error instanceof Error ? error.message : String(error));
     return false;
   }
+};
+
+// Function to reset session tracking (for testing)
+export const resetSessionTracking = () => {
+  const sessionKey = 'gcal-click-tracked';
+  sessionStorage.removeItem(sessionKey);
+  console.log('🔄 Session tracking reset - next click will count as new session');
 };

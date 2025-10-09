@@ -1,6 +1,6 @@
 import React from 'react';
 import { SelectedSlot } from '../App';
-import { trackGcalClick, testFirebaseConnection } from '../services/analyticsService';
+import { trackGcalClick, testFirebaseConnection, resetSessionTracking } from '../services/analyticsService';
 
 interface SidePanelProps {
   selectedSlot: SelectedSlot;
@@ -142,7 +142,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
         </div>
         
         {/* Debug Firebase Connection Button */}
-        {/* <div className="mt-4">
+        <div className="mt-4 space-y-2">
           <button
             onClick={async () => {
               console.log('🧪 Testing Firebase connection...');
@@ -152,7 +152,15 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
           >
             🧪 Test Firebase Connection
           </button>
-        </div> */}
+          <button
+            onClick={() => {
+              resetSessionTracking();
+            }}
+            className="w-full bg-orange-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-600 transition-colors text-sm"
+          >
+            🔄 Reset Session Tracking
+          </button>
+        </div>
       </div>
     </div>
   );
