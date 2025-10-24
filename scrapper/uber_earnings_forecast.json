@@ -1,0 +1,19 @@
+{
+  "date": "2025-10-23",
+  "time_window": "17:00 - 18:00",
+  "location": "San Francisco",
+  "demand_estimate": 20849.0,
+  "driver_supply_estimate": 3675.0,
+  "trips_per_driver": 2.13,
+  "avg_earnings_per_trip": 19.95,
+  "surge_multiplier": 1.3,
+  "gross_hourly_earnings": 55.28,
+  "estimated_costs_per_hour": 14.81,
+  "net_hourly_earnings": 40.46,
+  "deadtime_analysis": {
+    "wait_time_minutes": 2.5,
+    "pickup_time_minutes": 7.6,
+    "total_deadtime_minutes": 10.2,
+    "deadtime_impact_on_earnings": 10.2
+  }
+}
