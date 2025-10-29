@@ -11,6 +11,8 @@ interface ShiftsPageProps {
   onWeekChange: (newWeek: Date) => void;
   onDeleteShift: (shiftKey: string) => void;
   weeklyEarnings: { min: number; max: number };
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
   selectedSlot: any;
   onBookSlot: (day: string, hour: string, opportunity: any) => void;
 }
@@ -23,6 +25,8 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
   onWeekChange,
   onDeleteShift,
   weeklyEarnings,
+  gcalBusySlotKeys,
+  onImportGcal,
   selectedSlot,
   onBookSlot
 }) => {
@@ -37,6 +41,8 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
           onWeekChange={onWeekChange}
           onDeleteShift={onDeleteShift}
           weeklyEarnings={weeklyEarnings}
+          gcalBusySlotKeys={gcalBusySlotKeys}
+          onImportGcal={onImportGcal}
         />
       </div>
       {selectedSlot && (

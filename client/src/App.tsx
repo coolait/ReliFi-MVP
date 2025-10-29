@@ -86,6 +86,7 @@ function ShiftsPageWrapper() {
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [bookedShiftsByWeek, setBookedShiftsByWeek] = useState<Map<string, Map<string, BookedShift>>>(new Map());
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [gcalBusyByWeek, setGcalBusyByWeek] = useState<Map<string, Set<string>>>(new Map());
 
   const getWeekKey = (date: Date): string => {
     const startOfWeek = new Date(date);
@@ -144,6 +145,26 @@ function ShiftsPageWrapper() {
     setSelectedSlotKey(null);
   };
 
+  const handleImportGcal = async () => {
+    try {
+      const { computeWeekRange, fetchBusyIntervals, busyIntervalsToSlotKeys } = await import('./services/googleCalendarService');
+      const { start, end } = computeWeekRange(currentWeek);
+      const startIso = start.toISOString();
+      const endIso = end.toISOString();
+      const busy = await fetchBusyIntervals(startIso, endIso);
+      const slotKeys = busyIntervalsToSlotKeys(busy, start);
+      const weekKey = getWeekKey(currentWeek);
+      setGcalBusyByWeek(prev => {
+        const next = new Map(prev);
+        next.set(weekKey, slotKeys);
+        return next;
+      });
+    } catch (e) {
+      console.error('Failed to import Google Calendar:', e);
+      alert('Could not import Google Calendar. Please check credentials and try again.');
+    }
+  };
+
   const calculateWeeklyEarnings = (): { min: number; max: number } => {
     let totalMin = 0;
     let totalMax = 0;
@@ -183,6 +204,8 @@ function ShiftsPageWrapper() {
       onWeekChange={handleWeekChange}
       onDeleteShift={handleDeleteShift}
       weeklyEarnings={weeklyEarnings}
+      gcalBusySlotKeys={gcalBusyByWeek.get(getWeekKey(currentWeek)) || new Set()}
+      onImportGcal={handleImportGcal}
       selectedSlot={selectedSlot}
       onBookSlot={handleBookSlot}
     />

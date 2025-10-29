@@ -10,6 +10,8 @@ interface CalendarProps {
   onWeekChange: (newWeek: Date) => void;
   onDeleteShift: (shiftKey: string) => void;
   weeklyEarnings: { min: number; max: number };
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
 }
 
 const Calendar: React.FC<CalendarProps> = ({ 
@@ -19,7 +21,9 @@ const Calendar: React.FC<CalendarProps> = ({
   currentWeek, 
   onWeekChange, 
   onDeleteShift,
-  weeklyEarnings 
+  weeklyEarnings,
+  gcalBusySlotKeys,
+  onImportGcal
 }) => {
   const [loading, setLoading] = useState(false);
 
@@ -127,14 +131,21 @@ const Calendar: React.FC<CalendarProps> = ({
           <h1 className="text-3xl font-bold text-gray-900">Weekly Shift Recommendations</h1>
           <div className="flex items-center space-x-4">
             <button
+              onClick={() => onImportGcal()}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors"
+            >
+              Import Gcal
+            </button>
+            <button
               onClick={async () => {
                 try {
-                  const testUrl = `${API_BASE_URL}/api/test`;
+                  const testUrl = `${API_BASE_URL}${API_ENDPOINTS.health}`;
                   console.log('🧪 Testing API:', testUrl);
                   const response = await fetch(testUrl);
+                  if (!response.ok) throw new Error(`Status ${response.status}`);
                   const data = await response.json();
-                  console.log('✅ API Test Result:', data);
-                  alert(`API Test: ${data.message}`);
+                  console.log('✅ API Health Result:', data);
+                  alert(`API Health: ${data.status}`);
                 } catch (error) {
                   console.error('❌ API Test Failed:', error);
                   alert('API Test Failed - Check console for details');
@@ -205,15 +216,18 @@ const Calendar: React.FC<CalendarProps> = ({
                 const bookedShift = getBookedShift(dayName, hour);
                 const shiftKey = getShiftKey(dayName, hour);
                 
+                const isGcalBusy = gcalBusySlotKeys.has(slotKey);
                 return (
                   <div
                     key={`${dayIndex}-${hour}`}
                     className={`border-r border-gray-200 border-t border-gray-200 h-12 cursor-pointer transition-colors relative ${
-                      bookedShift 
-                        ? 'bg-green-100 hover:bg-green-200' 
-                        : isSelected 
-                          ? 'bg-blue-100 hover:bg-blue-200' 
-                          : 'bg-white hover:bg-blue-50'
+                      isGcalBusy
+                        ? 'bg-red-500'
+                        : bookedShift 
+                          ? 'bg-green-100 hover:bg-green-200' 
+                          : isSelected 
+                            ? 'bg-blue-100 hover:bg-blue-200' 
+                            : 'bg-white hover:bg-blue-50'
                     }`}
                     onClick={() => handleSlotClick(dayName, hour)}
                   >
@@ -223,7 +237,7 @@ const Calendar: React.FC<CalendarProps> = ({
                       </div>
                     )}
                     
-                    {bookedShift && !loading && (
+                    {!isGcalBusy && bookedShift && !loading && (
                       <div className="h-full flex flex-col justify-center p-1">
                         <div className="text-xs font-medium text-gray-900 truncate">
                           {bookedShift.service}
