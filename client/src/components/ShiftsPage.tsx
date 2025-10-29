@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Calendar from './Calendar';
 import SidePanel from './SidePanel';
+import LocationInput, { LocationState } from './LocationInput';
 import { GigOpportunity, BookedShift } from '../App';
 
 interface ShiftsPageProps {
@@ -13,6 +14,9 @@ interface ShiftsPageProps {
   weeklyEarnings: { min: number; max: number };
   selectedSlot: any;
   onBookSlot: (day: string, hour: string, opportunity: any) => void;
+  location: LocationState;
+  onLocationChange: (location: LocationState) => void;
+  isLocationLoading: boolean;
 }
 
 const ShiftsPage: React.FC<ShiftsPageProps> = ({
@@ -24,12 +28,22 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
   onDeleteShift,
   weeklyEarnings,
   selectedSlot,
-  onBookSlot
+  onBookSlot,
+  location,
+  onLocationChange,
+  isLocationLoading
 }) => {
   return (
     <div className="flex">
       <div className="flex-1">
-        <Calendar 
+        <div className="p-6">
+          <LocationInput
+            initialLocation={location}
+            onLocationChange={onLocationChange}
+            loading={isLocationLoading}
+          />
+        </div>
+        <Calendar
           onSlotClick={onSlotClick}
           bookedShifts={bookedShifts}
           selectedSlotKey={selectedSlotKey}
@@ -37,10 +51,11 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
           onWeekChange={onWeekChange}
           onDeleteShift={onDeleteShift}
           weeklyEarnings={weeklyEarnings}
+          location={location}
         />
       </div>
       {selectedSlot && (
-        <SidePanel 
+        <SidePanel
           selectedSlot={selectedSlot}
           onBookSlot={onBookSlot}
         />

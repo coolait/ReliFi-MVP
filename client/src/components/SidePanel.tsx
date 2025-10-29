@@ -83,18 +83,43 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
 
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-1">Hotspot Area</div>
-                <div className="text-sm text-gray-900">Downtown Core</div>
+                <div className="text-sm text-gray-900">{opportunity.hotspot || 'Downtown Core'}</div>
               </div>
 
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">Demand Forecast</div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-uber-blue h-2 rounded-full" 
-                    style={{ width: `${Math.random() * 40 + 60}%` }}
+                  <div
+                    className="bg-uber-blue h-2 rounded-full"
+                    style={{ width: `${(opportunity.demandScore || 0.75) * 100}%` }}
                   ></div>
                 </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Low</span>
+                  <span className="font-medium text-gray-900">{Math.round((opportunity.demandScore || 0.75) * 100)}%</span>
+                  <span>High</span>
+                </div>
               </div>
+
+              {opportunity.tripsPerHour && (
+                <div className="mb-4 flex justify-between text-sm">
+                  <span className="text-gray-500">Est. Trips/Hour:</span>
+                  <span className="font-medium text-gray-900">{opportunity.tripsPerHour.toFixed(1)}</span>
+                </div>
+              )}
+
+              {opportunity.surgeMultiplier && opportunity.surgeMultiplier > 1.0 && (
+                <div className="mb-4">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <span className="text-xs text-yellow-800 font-medium">
+                      {opportunity.surgeMultiplier.toFixed(1)}x Surge Pricing
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2">
               <button
@@ -122,9 +147,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
                     const endTime = endDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
                     
                     const eventTitle = `${opportunity.service} Drive`;
-                    const eventDetails = `Gig Work - ${opportunity.service}\nProjected Earnings: ${opportunity.projectedEarnings}\nTime: ${opportunity.startTime} - ${opportunity.endTime}\nLocation: Downtown Core`;
-                    
-                    const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle)}&dates=${startTime}/${endTime}&details=${encodeURIComponent(eventDetails)}&location=${encodeURIComponent('Downtown Core')}`;
+                    const hotspot = opportunity.hotspot || 'Downtown Core';
+                    const eventDetails = `Gig Work - ${opportunity.service}\nProjected Earnings: ${opportunity.projectedEarnings}\nTime: ${opportunity.startTime} - ${opportunity.endTime}\nHotspot: ${hotspot}${opportunity.demandScore ? `\nDemand Score: ${Math.round(opportunity.demandScore * 100)}%` : ''}${opportunity.tripsPerHour ? `\nEst. Trips/Hour: ${opportunity.tripsPerHour.toFixed(1)}` : ''}`;
+
+                    const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle)}&dates=${startTime}/${endTime}&details=${encodeURIComponent(eventDetails)}&location=${encodeURIComponent(hotspot)}`;
                     
                     window.open(googleCalendarUrl, '_blank');
                   }}

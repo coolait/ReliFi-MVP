@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GigOpportunity, BookedShift } from '../App';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import { LocationState } from './LocationInput';
 
 interface CalendarProps {
   onSlotClick: (day: string, hour: string, recommendations: GigOpportunity[]) => void;
@@ -10,21 +11,30 @@ interface CalendarProps {
   onWeekChange: (newWeek: Date) => void;
   onDeleteShift: (shiftKey: string) => void;
   weeklyEarnings: { min: number; max: number };
+  location: LocationState;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ 
-  onSlotClick, 
-  bookedShifts, 
-  selectedSlotKey, 
-  currentWeek, 
-  onWeekChange, 
+const Calendar: React.FC<CalendarProps> = ({
+  onSlotClick,
+  bookedShifts,
+  selectedSlotKey,
+  currentWeek,
+  onWeekChange,
   onDeleteShift,
-  weeklyEarnings 
+  weeklyEarnings,
+  location
 }) => {
   const [loading, setLoading] = useState(false);
+  const [earningsCache, setEarningsCache] = useState<Map<string, GigOpportunity[]>>(new Map());
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
+
+  // Clear cache when location changes
+  useEffect(() => {
+    console.log('📍 Location changed to:', location);
+    setEarningsCache(new Map());
+  }, [location]);
 
   const getWeekDates = (date: Date) => {
     const startOfWeek = new Date(date);
@@ -41,22 +51,124 @@ const Calendar: React.FC<CalendarProps> = ({
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}?t=${Date.now()}`;
-      console.log('🔍 API Call:', { url, day, hour });
-      const response = await fetch(url);
+      // Generate cache key using coordinates if available
+      const locationKey = location.coordinates
+        ? `${location.coordinates.lat.toFixed(4)},${location.coordinates.lng.toFixed(4)}`
+        : location.cityName;
+      const cacheKey = `${locationKey}-${day}-${hour}`;
+
+      // Check cache first
+      if (earningsCache.has(cacheKey)) {
+        console.log('📦 Using cached earnings data for', cacheKey);
+        onSlotClick(day, hour.toString(), earningsCache.get(cacheKey)!);
+        setLoading(false);
+        return;
+      }
+
+      // Format time for API call
+      const formatTime = (h: number) => {
+        if (h === 0) return '12:00 AM';
+        if (h < 12) return `${h}:00 AM`;
+        if (h === 12) return '12:00 PM';
+        return `${h - 12}:00 PM`;
+      };
+
+      const startTime = formatTime(hour);
+      const endTime = formatTime(hour + 1);
+
+      // Calculate the date for this specific day
+      const dayIndex = days.indexOf(day);
+      const slotDate = weekDates[dayIndex];
+      const dateStr = slotDate.toISOString().split('T')[0];
+
+      // Build base URL params
+      const buildUrl = (endpoint: string) => {
+        let url = `${API_BASE_URL}${endpoint}?`;
+        if (location.coordinates) {
+          url += `lat=${location.coordinates.lat}&lng=${location.coordinates.lng}&`;
+        } else {
+          url += `location=${encodeURIComponent(location.cityName)}&`;
+        }
+        url += `date=${dateStr}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
+        return url;
+      };
+
+      // TWO-PHASE LOADING: Fast preview → Accurate data
+
+      // PHASE 1: Fetch lightweight data first (< 50ms)
+      console.log('⚡ Phase 1: Fetching lightweight preview...');
+      const lightweightUrl = buildUrl('/api/earnings/lightweight');
+
+      try {
+        const lightResponse = await fetch(lightweightUrl);
+        if (lightResponse.ok) {
+          const lightData = await lightResponse.json();
+          const lightRecommendations: GigOpportunity[] = lightData.predictions.map((pred: any) => ({
+            service: pred.service,
+            startTime: pred.startTime,
+            endTime: pred.endTime,
+            projectedEarnings: `$${pred.min} - $${pred.max}`,
+            color: pred.color,
+            min: pred.min,
+            max: pred.max,
+            hotspot: pred.hotspot,
+            demandScore: pred.demandScore,
+            tripsPerHour: pred.tripsPerHour,
+            surgeMultiplier: pred.surgeMultiplier
+          }));
+
+          // Show lightweight data immediately
+          onSlotClick(day, hour.toString(), lightRecommendations);
+          setLoading(false);
+          console.log('✅ Phase 1 complete: Showing lightweight preview');
+        }
+      } catch (err) {
+        console.log('⚠️ Phase 1 failed, skipping to Phase 2');
+      }
+
+      // PHASE 2: Fetch full scraper data in background (3-10s)
+      console.log('🔍 Phase 2: Fetching full scraper data...');
+      const scraperUrl = buildUrl('/api/earnings');
+
+      const response = await fetch(scraperUrl);
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      console.log('✅ API Data received:', data);
-      onSlotClick(day, hour.toString(), data.recommendations);
+      console.log('✅ Phase 2 complete: Full scraper data received');
+
+      // Transform the predictions into GigOpportunity format
+      const recommendations: GigOpportunity[] = data.predictions.map((pred: any) => ({
+        service: pred.service,
+        startTime: pred.startTime,
+        endTime: pred.endTime,
+        projectedEarnings: `$${pred.min} - $${pred.max}`,
+        color: pred.color,
+        min: pred.min,
+        max: pred.max,
+        hotspot: pred.hotspot,
+        demandScore: pred.demandScore,
+        tripsPerHour: pred.tripsPerHour,
+        surgeMultiplier: pred.surgeMultiplier
+      }));
+
+      // Cache the full scraper results
+      setEarningsCache(prev => {
+        const newCache = new Map(prev);
+        newCache.set(cacheKey, recommendations);
+        return newCache;
+      });
+
+      // Update UI with accurate scraper data
+      onSlotClick(day, hour.toString(), recommendations);
+      console.log('🎯 Updated UI with accurate scraper predictions');
     } catch (error) {
-      console.error('❌ Error fetching recommendations:', error);
+      console.error('❌ Error fetching earnings:', error);
       console.log('🔄 Using fallback mock data for hour:', hour);
-      
+
       // Fallback mock data with proper time formatting
       const formatTime = (h: number) => {
         if (h === 0) return '12:00 AM';
@@ -64,11 +176,11 @@ const Calendar: React.FC<CalendarProps> = ({
         if (h === 12) return '12:00 PM';
         return `${h - 12}:00 PM`;
       };
-      
+
       const mockRecommendations: GigOpportunity[] = [
-        { service: 'Uber', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$25 - $35', color: '#4285F4' },
-        { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#4285F4' },
-        { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700' }
+        { service: 'Uber', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$25 - $35', color: '#4285F4', min: 25, max: 35, hotspot: 'Downtown Core', demandScore: 0.75 },
+        { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#FF00BF', min: 22, max: 32, hotspot: 'Downtown Core', demandScore: 0.72 },
+        { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700', min: 18, max: 28, hotspot: 'Restaurant Districts', demandScore: 0.70 }
       ];
       console.log('🎭 Mock recommendations:', mockRecommendations);
       onSlotClick(day, hour.toString(), mockRecommendations);

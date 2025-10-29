@@ -5,6 +5,7 @@ import SidePanel from './components/SidePanel';
 import Header from './components/Header';
 import ComingSoonPage from './components/ComingSoonPage';
 import ShiftsPage from './components/ShiftsPage';
+import { LocationState } from './components/LocationInput';
 
 export interface GigOpportunity {
   service: string;
@@ -12,6 +13,12 @@ export interface GigOpportunity {
   endTime: string;
   projectedEarnings: string;
   color: string;
+  min?: number;
+  max?: number;
+  hotspot?: string;
+  demandScore?: number;
+  tripsPerHour?: number;
+  surgeMultiplier?: number;
 }
 
 export interface SelectedSlot {
@@ -86,6 +93,12 @@ function ShiftsPageWrapper() {
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [bookedShiftsByWeek, setBookedShiftsByWeek] = useState<Map<string, Map<string, BookedShift>>>(new Map());
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  // Location state now includes coordinates and city name
+  const [location, setLocation] = useState<LocationState>({
+    coordinates: { lat: 37.7749, lng: -122.4194 }, // Default to SF
+    cityName: 'San Francisco'
+  });
+  const [isLocationLoading, setIsLocationLoading] = useState(false);
 
   const getWeekKey = (date: Date): string => {
     const startOfWeek = new Date(date);
@@ -144,6 +157,17 @@ function ShiftsPageWrapper() {
     setSelectedSlotKey(null);
   };
 
+  const handleLocationChange = async (newLocation: LocationState) => {
+    console.log('📍 Location changed:', newLocation);
+    setIsLocationLoading(true);
+    setLocation(newLocation);
+    // Clear selected slot when location changes
+    setSelectedSlot(null);
+    setSelectedSlotKey(null);
+    // The Calendar component will automatically refetch with new location
+    setTimeout(() => setIsLocationLoading(false), 1000);
+  };
+
   const calculateWeeklyEarnings = (): { min: number; max: number } => {
     let totalMin = 0;
     let totalMax = 0;
@@ -185,6 +209,9 @@ function ShiftsPageWrapper() {
       weeklyEarnings={weeklyEarnings}
       selectedSlot={selectedSlot}
       onBookSlot={handleBookSlot}
+      location={location}
+      onLocationChange={handleLocationChange}
+      isLocationLoading={isLocationLoading}
     />
   );
 }
