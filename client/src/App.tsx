@@ -158,22 +158,54 @@ function ShiftsPageWrapper() {
 
   const handleImportGcal = async () => {
     try {
+      console.log('📅 Starting Google Calendar import...');
+      console.log('📅 Current week:', currentWeek.toLocaleDateString());
+      
       const { computeWeekRange, fetchBusyIntervals, busyIntervalsToSlotKeys } = await import('./services/googleCalendarService');
       const { start, end } = computeWeekRange(currentWeek);
       const startIso = start.toISOString();
       const endIso = end.toISOString();
+      
+      console.log('📅 Fetching busy intervals for week:', {
+        start: start.toLocaleString(),
+        end: end.toLocaleString(),
+        startIso,
+        endIso
+      });
+      
       const busy = await fetchBusyIntervals(startIso, endIso);
+      
+      if (busy.length === 0) {
+        alert('No busy times found in your Google Calendar for this week. Make sure you have events scheduled and try again.');
+        console.log('⚠️ No busy intervals found in Google Calendar');
+        return;
+      }
+      
       const slotKeys = busyIntervalsToSlotKeys(busy, start);
       const weekKey = getWeekKey(currentWeek);
+      
+      console.log('📅 Imported GCal data:', {
+        busyIntervals: busy.length,
+        slotKeysCount: slotKeys.size,
+        slotKeys: Array.from(slotKeys).slice(0, 20),
+        weekKey
+      });
+      
       setGcalBusyByWeek(prev => {
         const next = new Map(prev);
         next.set(weekKey, slotKeys);
+        console.log('📅 Updated GCal busy state:', {
+          weekKey,
+          slotKeysCount: slotKeys.size,
+          allWeekKeys: Array.from(next.keys())
+        });
         return next;
       });
-      alert('Google Calendar imported successfully! Busy times are now highlighted in gray.');
+      
+      alert(`✅ Google Calendar imported successfully!\n\nFound ${busy.length} busy intervals\nMarking ${slotKeys.size} time slots as busy\n\nGray blocks now show your unavailable times.`);
     } catch (e) {
-      console.error('Failed to import Google Calendar:', e);
-      alert('Could not import Google Calendar. Please check your credentials and try again.');
+      console.error('❌ Failed to import Google Calendar:', e);
+      alert(`Could not import Google Calendar: ${e instanceof Error ? e.message : 'Unknown error'}\n\nCheck the console for details.`);
     }
   };
 
@@ -232,7 +264,18 @@ function ShiftsPageWrapper() {
       location={location}
       onLocationChange={handleLocationChange}
       isLocationLoading={isLocationLoading}
-      gcalBusySlotKeys={gcalBusyByWeek.get(getWeekKey(currentWeek)) || new Set()}
+      gcalBusySlotKeys={(() => {
+        const weekKey = getWeekKey(currentWeek);
+        const busySlots = gcalBusyByWeek.get(weekKey) || new Set();
+        if (busySlots.size > 0) {
+          console.log('📅 Passing GCal busy slots to Calendar:', {
+            weekKey,
+            busySlotsCount: busySlots.size,
+            busySlots: Array.from(busySlots).slice(0, 10)
+          });
+        }
+        return busySlots;
+      })()}
       onImportGcal={handleImportGcal}
     />
   );

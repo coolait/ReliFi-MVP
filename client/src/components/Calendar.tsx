@@ -107,6 +107,12 @@ const Calendar: React.FC<CalendarProps> = ({
         const lightResponse = await fetch(lightweightUrl);
         if (lightResponse.ok) {
           const lightData = await lightResponse.json();
+          
+          // Check if this is fallback data
+          if (lightData.metadata?.fallback || lightData.fallback) {
+            console.warn('⚠️ Using fallback earnings data - Python scraper API is not running. Start it with: cd scrapper && python api_server.py');
+          }
+          
           const lightRecommendations: GigOpportunity[] = lightData.predictions.map((pred: any) => ({
             service: pred.service,
             startTime: pred.startTime,
@@ -142,7 +148,13 @@ const Calendar: React.FC<CalendarProps> = ({
       }
 
       const data = await response.json();
-      console.log('✅ Phase 2 complete: Full scraper data received');
+      
+      // Check if this is fallback data
+      if (data.fallback) {
+        console.warn('⚠️ Using fallback earnings data - Python scraper API is not running. Start it with: cd scrapper && python api_server.py');
+      } else {
+        console.log('✅ Phase 2 complete: Full scraper data received');
+      }
 
       // Transform the predictions into GigOpportunity format
       const recommendations: GigOpportunity[] = data.predictions.map((pred: any) => ({
@@ -328,6 +340,16 @@ const Calendar: React.FC<CalendarProps> = ({
                 const bookedShift = getBookedShift(dayName, hour);
                 const shiftKey = getShiftKey(dayName, hour);
                 const isGcalBusy = gcalBusySlotKeys.has(slotKey);
+                
+                // Debug logging (only log once per render)
+                if (dayIndex === 0 && hour === 6 && gcalBusySlotKeys.size > 0) {
+                  console.log('📅 Checking GCal busy slots:', {
+                    totalBusySlots: gcalBusySlotKeys.size,
+                    exampleSlotKeys: Array.from(gcalBusySlotKeys).slice(0, 5),
+                    currentSlotKey: slotKey,
+                    isGcalBusy: isGcalBusy
+                  });
+                }
                 
                 return (
                   <div

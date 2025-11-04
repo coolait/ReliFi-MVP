@@ -105,16 +105,33 @@ export async function fetchBusyIntervals(startIso: string, endIso: string): Prom
 
   // @ts-ignore
   const gapi = window.gapi;
+  
+  // Get user's timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   const body = {
     timeMin: startIso,
     timeMax: endIso,
+    timeZone: userTimezone,
     items: [{ id: 'primary' }]
   };
+  
+  console.log('📅 Fetching busy intervals:', {
+    timeMin: startIso,
+    timeMax: endIso,
+    timeZone: userTimezone
+  });
   
   const resp = await gapi.client.calendar.freebusy.query({ resource: body });
   const calendars = resp.result.calendars || {};
   const primary = calendars['primary'];
   const busy = (primary?.busy || []) as Array<{ start: string; end: string }>;
+  
+  console.log('📅 Received busy intervals from Google:', busy.length);
+  busy.forEach((interval, idx) => {
+    console.log(`  ${idx + 1}. ${interval.start} - ${interval.end}`);
+  });
+  
   return busy.map(b => ({ start: b.start, end: b.end }));
 }
 
@@ -129,17 +146,20 @@ export function computeWeekRange(currentWeek: Date): { start: Date; end: Date } 
 
 export function busyIntervalsToSlotKeys(busy: BusyTime[], weekStart: Date): Set<string> {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  // Calculate start of week in local time (Sunday at 00:00)
   const startOfWeek = new Date(weekStart);
+  startOfWeek.setDate(weekStart.getDate() - weekStart.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
   const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  endOfWeek.setDate(startOfWeek.getDate() + 7);
 
   const result = new Set<string>();
 
-  // Our grid hours are 6..23 inclusive
+  // Our grid hours are 6..23 inclusive (local time)
   const gridHours = Array.from({ length: 18 }, (_, i) => i + 6);
 
-  // Precompute date for each day index
+  // Precompute date for each day index in local timezone
   const dayDateAtHour = (dayIndex: number, hour: number): Date => {
     const d = new Date(startOfWeek);
     d.setDate(startOfWeek.getDate() + dayIndex);
@@ -147,7 +167,23 @@ export function busyIntervalsToSlotKeys(busy: BusyTime[], weekStart: Date): Set<
     return d;
   };
 
-  const clamp = (d: Date) => Math.max(startOfWeek.getTime(), Math.min(endOfWeek.getTime(), d.getTime()));
+  // Convert Google Calendar busy intervals to local time milliseconds
+  const busyIntervals = busy.map(interval => {
+    // Google Calendar returns ISO strings (may be in UTC or local time)
+    // Parse them and convert to local time for comparison
+    const start = new Date(interval.start);
+    const end = new Date(interval.end);
+    return {
+      start: start.getTime(),
+      end: end.getTime()
+    };
+  });
+
+  console.log('📅 Processing busy intervals:', busyIntervals.length);
+  console.log('📅 Week range:', {
+    start: startOfWeek.toLocaleString(),
+    end: endOfWeek.toLocaleString()
+  });
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
     for (const hour of gridHours) {
@@ -157,11 +193,12 @@ export function busyIntervalsToSlotKeys(busy: BusyTime[], weekStart: Date): Set<
       const slotEndMs = slotEnd.getTime();
 
       let overlaps = false;
-      for (const interval of busy) {
-        const bStartMs = clamp(new Date(interval.start));
-        const bEndMs = clamp(new Date(interval.end));
-        if (bEndMs > slotStartMs && bStartMs < slotEndMs) {
+      for (const interval of busyIntervals) {
+        // Check if busy interval overlaps with this time slot
+        // Overlap occurs if: interval.end > slotStart AND interval.start < slotEnd
+        if (interval.end > slotStartMs && interval.start < slotEndMs) {
           overlaps = true;
+          console.log(`✅ Found overlap: ${days[dayIndex]} ${hour}:00 - ${hour + 1}:00 with interval ${new Date(interval.start).toLocaleString()} - ${new Date(interval.end).toLocaleString()}`);
           break;
         }
       }
@@ -172,6 +209,7 @@ export function busyIntervalsToSlotKeys(busy: BusyTime[], weekStart: Date): Set<
     }
   }
 
+  console.log(`📅 Total busy slots: ${result.size}`);
   return result;
 }
 
