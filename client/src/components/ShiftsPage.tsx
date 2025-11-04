@@ -17,6 +17,8 @@ interface ShiftsPageProps {
   location: LocationState;
   onLocationChange: (location: LocationState) => void;
   isLocationLoading: boolean;
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
 }
 
 const ShiftsPage: React.FC<ShiftsPageProps> = ({
@@ -31,7 +33,9 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
   onBookSlot,
   location,
   onLocationChange,
-  isLocationLoading
+  isLocationLoading,
+  gcalBusySlotKeys,
+  onImportGcal
 }) => {
   return (
     <div className="flex">
@@ -52,6 +56,8 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
           onDeleteShift={onDeleteShift}
           weeklyEarnings={weeklyEarnings}
           location={location}
+          gcalBusySlotKeys={gcalBusySlotKeys}
+          onImportGcal={onImportGcal}
         />
       </div>
       {selectedSlot && (

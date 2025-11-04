@@ -12,6 +12,8 @@ interface CalendarProps {
   onDeleteShift: (shiftKey: string) => void;
   weeklyEarnings: { min: number; max: number };
   location: LocationState;
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -22,7 +24,9 @@ const Calendar: React.FC<CalendarProps> = ({
   onWeekChange,
   onDeleteShift,
   weeklyEarnings,
-  location
+  location,
+  gcalBusySlotKeys,
+  onImportGcal
 }) => {
   const [loading, setLoading] = useState(false);
   const [earningsCache, setEarningsCache] = useState<Map<string, GigOpportunity[]>>(new Map());
@@ -239,6 +243,12 @@ const Calendar: React.FC<CalendarProps> = ({
           <h1 className="text-3xl font-bold text-gray-900">Weekly Shift Recommendations</h1>
           <div className="flex items-center space-x-4">
             <button
+              onClick={onImportGcal}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+            >
+              📅 Import Gcal
+            </button>
+            <button
               onClick={async () => {
                 try {
                   const testUrl = `${API_BASE_URL}/api/health`;
@@ -317,16 +327,19 @@ const Calendar: React.FC<CalendarProps> = ({
                 const isSelected = selectedSlotKey === slotKey;
                 const bookedShift = getBookedShift(dayName, hour);
                 const shiftKey = getShiftKey(dayName, hour);
+                const isGcalBusy = gcalBusySlotKeys.has(slotKey);
                 
                 return (
                   <div
                     key={`${dayIndex}-${hour}`}
                     className={`border-r border-gray-200 border-t border-gray-200 h-12 cursor-pointer transition-colors relative ${
-                      bookedShift 
-                        ? 'bg-green-100 hover:bg-green-200' 
-                        : isSelected 
-                          ? 'bg-blue-100 hover:bg-blue-200' 
-                          : 'bg-white hover:bg-blue-50'
+                      isGcalBusy
+                        ? 'bg-gray-400 hover:bg-gray-500' 
+                        : bookedShift 
+                          ? 'bg-green-100 hover:bg-green-200' 
+                          : isSelected 
+                            ? 'bg-blue-100 hover:bg-blue-200' 
+                            : 'bg-white hover:bg-blue-50'
                     }`}
                     onClick={() => handleSlotClick(dayName, hour)}
                   >
@@ -336,7 +349,7 @@ const Calendar: React.FC<CalendarProps> = ({
                       </div>
                     )}
                     
-                    {bookedShift && !loading && (
+                    {!isGcalBusy && bookedShift && !loading && (
                       <div className="h-full flex flex-col justify-center p-1">
                         <div className="text-xs font-medium text-gray-900 truncate">
                           {bookedShift.service}

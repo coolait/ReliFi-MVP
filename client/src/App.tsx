@@ -91,6 +91,7 @@ function ShiftsPageWrapper() {
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [bookedShiftsByWeek, setBookedShiftsByWeek] = useState<Map<string, Map<string, BookedShift>>>(new Map());
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [gcalBusyByWeek, setGcalBusyByWeek] = useState<Map<string, Set<string>>>(new Map());
   // Location state now includes coordinates and city name
   const [location, setLocation] = useState<LocationState>({
     coordinates: { lat: 37.7749, lng: -122.4194 }, // Default to SF
@@ -155,6 +156,27 @@ function ShiftsPageWrapper() {
     setSelectedSlotKey(null);
   };
 
+  const handleImportGcal = async () => {
+    try {
+      const { computeWeekRange, fetchBusyIntervals, busyIntervalsToSlotKeys } = await import('./services/googleCalendarService');
+      const { start, end } = computeWeekRange(currentWeek);
+      const startIso = start.toISOString();
+      const endIso = end.toISOString();
+      const busy = await fetchBusyIntervals(startIso, endIso);
+      const slotKeys = busyIntervalsToSlotKeys(busy, start);
+      const weekKey = getWeekKey(currentWeek);
+      setGcalBusyByWeek(prev => {
+        const next = new Map(prev);
+        next.set(weekKey, slotKeys);
+        return next;
+      });
+      alert('Google Calendar imported successfully! Busy times are now highlighted in gray.');
+    } catch (e) {
+      console.error('Failed to import Google Calendar:', e);
+      alert('Could not import Google Calendar. Please check your credentials and try again.');
+    }
+  };
+
   const handleLocationChange = async (newLocation: LocationState) => {
     console.log('📍 Location changed:', newLocation);
     setIsLocationLoading(true);
@@ -210,6 +232,8 @@ function ShiftsPageWrapper() {
       location={location}
       onLocationChange={handleLocationChange}
       isLocationLoading={isLocationLoading}
+      gcalBusySlotKeys={gcalBusyByWeek.get(getWeekKey(currentWeek)) || new Set()}
+      onImportGcal={handleImportGcal}
     />
   );
 }
