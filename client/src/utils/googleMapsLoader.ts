@@ -77,6 +77,6 @@ export const isGoogleMapsLoaded = (): boolean => {
  */
 declare global {
   interface Window {
-    google: typeof google;
+    google: any;
   }
 }

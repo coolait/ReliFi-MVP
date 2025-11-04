@@ -30,8 +30,8 @@ const MapPicker: React.FC<MapPickerProps> = ({
   const [cityName, setCityName] = useState<string>('Loading...');
   const [isLoading, setIsLoading] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
-  const googleMapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
+  const googleMapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
   const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
@@ -144,7 +144,7 @@ const MapPicker: React.FC<MapPickerProps> = ({
     });
 
     // Handle map click
-    map.addListener('click', (event: google.maps.MapMouseEvent) => {
+    map.addListener('click', (event: any) => {
       if (event.latLng) {
         updateLocation({
           lat: event.latLng.lat(),

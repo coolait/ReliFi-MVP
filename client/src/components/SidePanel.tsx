@@ -1,6 +1,6 @@
 import React from 'react';
 import { SelectedSlot } from '../App';
-import { trackGcalClick, testFirebaseConnection, resetSessionTracking } from '../services/analyticsService';
+import { trackGcalClick, testFirebaseConnection } from '../services/analyticsService';
 
 interface SidePanelProps {
   selectedSlot: SelectedSlot;

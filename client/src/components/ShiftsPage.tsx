@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Calendar from './Calendar';
 import SidePanel from './SidePanel';
 import LocationInput, { LocationState } from './LocationInput';

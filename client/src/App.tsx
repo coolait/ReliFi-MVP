@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import Calendar from './components/Calendar';
-import SidePanel from './components/SidePanel';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import ComingSoonPage from './components/ComingSoonPage';
 import ShiftsPage from './components/ShiftsPage';

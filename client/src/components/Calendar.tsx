@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GigOpportunity, BookedShift } from '../App';
-import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import { API_BASE_URL } from '../config/api';
 import { LocationState } from './LocationInput';
 
 interface CalendarProps {
@@ -241,12 +241,13 @@ const Calendar: React.FC<CalendarProps> = ({
             <button
               onClick={async () => {
                 try {
-                  const testUrl = `${API_BASE_URL}/api/test`;
+                  const testUrl = `${API_BASE_URL}/api/health`;
                   console.log('🧪 Testing API:', testUrl);
                   const response = await fetch(testUrl);
+                  if (!response.ok) throw new Error(`Status ${response.status}`);
                   const data = await response.json();
-                  console.log('✅ API Test Result:', data);
-                  alert(`API Test: ${data.message}`);
+                  console.log('✅ API Health Result:', data);
+                  alert(`API Health: ${data.status}`);
                 } catch (error) {
                   console.error('❌ API Test Failed:', error);
                   alert('API Test Failed - Check console for details');
