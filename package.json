@@ -16,9 +16,8 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "@vercel/node": "^5.3.26"
-  },
-  "dependencies": {
+    "@vercel/node": "^5.3.26",
+    "axios": "^1.6.0",
     "firebase": "^12.3.0"
   }
 }
