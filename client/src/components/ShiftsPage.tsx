@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Calendar from './Calendar';
 import SidePanel from './SidePanel';
+import LocationInput, { LocationState } from './LocationInput';
 import { GigOpportunity, BookedShift } from '../App';
 
 interface ShiftsPageProps {
@@ -13,6 +14,11 @@ interface ShiftsPageProps {
   weeklyEarnings: { min: number; max: number };
   selectedSlot: any;
   onBookSlot: (day: string, hour: string, opportunity: any) => void;
+  location: LocationState;
+  onLocationChange: (location: LocationState) => void;
+  isLocationLoading: boolean;
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
 }
 
 const ShiftsPage: React.FC<ShiftsPageProps> = ({
@@ -24,12 +30,24 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
   onDeleteShift,
   weeklyEarnings,
   selectedSlot,
-  onBookSlot
+  onBookSlot,
+  location,
+  onLocationChange,
+  isLocationLoading,
+  gcalBusySlotKeys,
+  onImportGcal
 }) => {
   return (
     <div className="flex">
       <div className="flex-1">
-        <Calendar 
+        <div className="p-6">
+          <LocationInput
+            initialLocation={location}
+            onLocationChange={onLocationChange}
+            loading={isLocationLoading}
+          />
+        </div>
+        <Calendar
           onSlotClick={onSlotClick}
           bookedShifts={bookedShifts}
           selectedSlotKey={selectedSlotKey}
@@ -37,13 +55,18 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
           onWeekChange={onWeekChange}
           onDeleteShift={onDeleteShift}
           weeklyEarnings={weeklyEarnings}
+          location={location}
+          gcalBusySlotKeys={gcalBusySlotKeys}
+          onImportGcal={onImportGcal}
         />
       </div>
       {selectedSlot && (
-        <SidePanel 
-          selectedSlot={selectedSlot}
-          onBookSlot={onBookSlot}
-        />
+        <div className="flex-shrink-0">
+          <SidePanel
+            selectedSlot={selectedSlot}
+            onBookSlot={onBookSlot}
+          />
+        </div>
       )}
     </div>
   );

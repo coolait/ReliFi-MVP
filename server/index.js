@@ -1,8 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Python scraper API URL
+const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:5002';
 
 // Middleware
 app.use(cors());
@@ -133,6 +137,183 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running!' });
 });
 
+// Lightweight earnings endpoint (FAST - no scraping)
+app.get('/api/earnings/lightweight', async (req, res) => {
+  try {
+    const { location, date, startTime, endTime, service } = req.query;
+
+    // Call Python lightweight API
+    const response = await axios.get(`${PYTHON_API_URL}/api/earnings/lightweight`, {
+      params: { location, date, startTime, endTime, service },
+      timeout: 5000 // 5 second timeout (should be < 50ms)
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error calling Python lightweight API:', error.message);
+
+    // Fallback to basic estimates
+    const hour = parseInt(req.query.startTime?.split(':')[0] || '9');
+    const formatTime = (h) => {
+      if (h === 0) return '12:00 AM';
+      if (h < 12) return `${h}:00 AM`;
+      if (h === 12) return '12:00 PM';
+      return `${h - 12}:00 PM`;
+    };
+
+    const fallbackData = {
+      location: req.query.location || 'San Francisco',
+      date: req.query.date || new Date().toISOString().split('T')[0],
+      timeSlot: `${formatTime(hour)} - ${formatTime(hour + 1)}`,
+      hour: hour,
+      predictions: [
+        {
+          service: 'Uber',
+          min: 20,
+          max: 30,
+          hotspot: 'Downtown Core',
+          demandScore: 0.75,
+          tripsPerHour: 2.0,
+          surgeMultiplier: 1.0,
+          color: '#4285F4',
+          startTime: formatTime(hour),
+          endTime: formatTime(hour + 1)
+        },
+        {
+          service: 'Lyft',
+          min: 18,
+          max: 28,
+          hotspot: 'Downtown Core',
+          demandScore: 0.72,
+          tripsPerHour: 1.9,
+          surgeMultiplier: 1.0,
+          color: '#FF00BF',
+          startTime: formatTime(hour),
+          endTime: formatTime(hour + 1)
+        },
+        {
+          service: 'DoorDash',
+          min: 16,
+          max: 26,
+          hotspot: 'Restaurant Districts',
+          demandScore: 0.70,
+          tripsPerHour: 2.5,
+          surgeMultiplier: 1.0,
+          color: '#FFD700',
+          startTime: formatTime(hour),
+          endTime: formatTime(hour + 1)
+        }
+      ],
+      metadata: {
+        lightweight: true,
+        fallback: true
+      }
+    };
+
+    res.json(fallbackData);
+  }
+});
+
+// Full earnings endpoint (SLOW - with scraping)
+app.get('/api/earnings', async (req, res) => {
+  try {
+    const { location, date, startTime, endTime, service } = req.query;
+
+    // Call Python API
+    const response = await axios.get(`${PYTHON_API_URL}/api/earnings`, {
+      params: { location, date, startTime, endTime, service },
+      timeout: 30000 // 30 second timeout
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error calling Python earnings API:', error.message);
+
+    // Fallback to mock data if Python API is unavailable
+    const hour = parseInt(req.query.startTime?.split(':')[0] || '9');
+    const formatTime = (h) => {
+      if (h === 0) return '12:00 AM';
+      if (h < 12) return `${h}:00 AM`;
+      if (h === 12) return '12:00 PM';
+      return `${h - 12}:00 PM`;
+    };
+
+    const fallbackData = {
+      location: req.query.location || 'San Francisco',
+      date: req.query.date || new Date().toISOString().split('T')[0],
+      timeSlot: `${formatTime(hour)} - ${formatTime(hour + 1)}`,
+      hour: hour,
+      predictions: [
+        {
+          service: 'Uber',
+          min: 25,
+          max: 35,
+          hotspot: 'Downtown Core',
+          demandScore: 0.75,
+          tripsPerHour: 2.3,
+          surgeMultiplier: 1.0,
+          color: '#4285F4',
+          startTime: formatTime(hour),
+          endTime: formatTime(hour + 1)
+        },
+        {
+          service: 'Lyft',
+          min: 22,
+          max: 32,
+          hotspot: 'Downtown Core',
+          demandScore: 0.72,
+          tripsPerHour: 2.1,
+          surgeMultiplier: 1.0,
+          color: '#FF00BF',
+          startTime: formatTime(hour),
+          endTime: formatTime(hour + 1)
+        }
+      ],
+      fallback: true
+    };
+
+    res.json(fallbackData);
+  }
+});
+
+// Batch earnings endpoint
+app.post('/api/earnings/batch', async (req, res) => {
+  try {
+    const response = await axios.post(`${PYTHON_API_URL}/api/earnings/batch`, req.body, {
+      timeout: 60000 // 60 second timeout for batch
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error calling Python batch earnings API:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch batch earnings data',
+      message: error.message
+    });
+  }
+});
+
+// Week earnings endpoint
+app.get('/api/earnings/week', async (req, res) => {
+  try {
+    const { location, startDate } = req.query;
+
+    const response = await axios.get(`${PYTHON_API_URL}/api/earnings/week`, {
+      params: { location, startDate },
+      timeout: 90000 // 90 second timeout for week data
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error calling Python week earnings API:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch week earnings data',
+      message: error.message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Python scraper API expected at: ${PYTHON_API_URL}`);
 });

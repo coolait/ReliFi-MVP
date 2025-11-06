@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GigOpportunity, BookedShift } from '../App';
-import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import { API_BASE_URL } from '../config/api';
+import { LocationState } from './LocationInput';
 
 interface CalendarProps {
   onSlotClick: (day: string, hour: string, recommendations: GigOpportunity[]) => void;
@@ -10,21 +11,102 @@ interface CalendarProps {
   onWeekChange: (newWeek: Date) => void;
   onDeleteShift: (shiftKey: string) => void;
   weeklyEarnings: { min: number; max: number };
+  location: LocationState;
+  gcalBusySlotKeys: Set<string>;
+  onImportGcal: () => Promise<void> | void;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ 
-  onSlotClick, 
-  bookedShifts, 
-  selectedSlotKey, 
-  currentWeek, 
-  onWeekChange, 
+const Calendar: React.FC<CalendarProps> = ({
+  onSlotClick,
+  bookedShifts,
+  selectedSlotKey,
+  currentWeek,
+  onWeekChange,
   onDeleteShift,
-  weeklyEarnings 
+  weeklyEarnings,
+  location,
+  gcalBusySlotKeys,
+  onImportGcal
 }) => {
   const [loading, setLoading] = useState(false);
+  const [earningsCache, setEarningsCache] = useState<Map<string, GigOpportunity[]>>(new Map());
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
+
+  // Map a raw service name to one of the two categories
+  const mapServiceToCategory = (service: string): 'Rideshare' | 'Food Delivery' => {
+    const s = service.toLowerCase();
+    if (s.includes('uber') && !s.includes('eats')) return 'Rideshare';
+    if (s.includes('lyft')) return 'Rideshare';
+    if (s.includes('rideshare')) return 'Rideshare';
+    // Everything else we consider Food Delivery for now
+    return 'Food Delivery';
+  };
+
+  // Aggregate multiple predictions into the two categories
+  const aggregateToCategories = (predictions: any[], hour: number): GigOpportunity[] => {
+    type Acc = {
+      count: number;
+      minSum: number;
+      maxSum: number;
+      color: string;
+    };
+    const acc: Record<'Rideshare' | 'Food Delivery', Acc> = {
+      'Rideshare': { count: 0, minSum: 0, maxSum: 0, color: '#4285F4' },
+      'Food Delivery': { count: 0, minSum: 0, maxSum: 0, color: '#FFD700' }
+    };
+
+    for (let i = 0; i < predictions.length; i++) {
+      const p = predictions[i];
+      const category = mapServiceToCategory(p.service || '');
+      const minVal = typeof p.min === 'number' ? p.min : parseInt((p.min || '0').toString());
+      const maxVal = typeof p.max === 'number' ? p.max : parseInt((p.max || '0').toString());
+      acc[category].count += 1;
+      acc[category].minSum += isNaN(minVal) ? 0 : minVal;
+      acc[category].maxSum += isNaN(maxVal) ? 0 : maxVal;
+    }
+
+    const formatTime = (h: number) => {
+      if (h === 0) return '12:00 AM';
+      if (h < 12) return `${h}:00 AM`;
+      if (h === 12) return '12:00 PM';
+      return `${h - 12}:00 PM`;
+    };
+
+    const startTime = formatTime(hour);
+    const endTime = formatTime(hour + 1);
+
+    const results: GigOpportunity[] = [];
+    (['Rideshare', 'Food Delivery'] as const).forEach((cat) => {
+      if (acc[cat].count > 0) {
+        const avgMin = Math.round(acc[cat].minSum / acc[cat].count);
+        const avgMax = Math.round(acc[cat].maxSum / acc[cat].count);
+        results.push({
+          service: cat,
+          startTime,
+          endTime,
+          projectedEarnings: `$${avgMin} - $${avgMax}`,
+          color: acc[cat].color,
+          min: avgMin,
+          max: avgMax,
+          hotspot: predictions[0]?.hotspot,
+          demandScore: predictions[0]?.demandScore,
+          tripsPerHour: predictions[0]?.tripsPerHour,
+          surgeMultiplier: predictions[0]?.surgeMultiplier
+        } as any);
+      }
+    });
+
+    // If a category had no entries, still include a placeholder with $0 - $0? We'll omit to avoid clutter
+    return results;
+  };
+
+  // Clear cache when location changes
+  useEffect(() => {
+    console.log('📍 Location changed to:', location);
+    setEarningsCache(new Map());
+  }, [location]);
 
   const getWeekDates = (date: Date) => {
     const startOfWeek = new Date(date);
@@ -41,22 +123,111 @@ const Calendar: React.FC<CalendarProps> = ({
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const url = `${API_BASE_URL}${API_ENDPOINTS.recommendations(day.toLowerCase(), hour.toString())}?t=${Date.now()}`;
-      console.log('🔍 API Call:', { url, day, hour });
-      const response = await fetch(url);
+      // Generate cache key using coordinates if available
+      const locationKey = location.coordinates
+        ? `${location.coordinates.lat.toFixed(4)},${location.coordinates.lng.toFixed(4)}`
+        : location.cityName;
+      const cacheKey = `${locationKey}-${day}-${hour}`;
+
+      // Check cache first
+      if (earningsCache.has(cacheKey)) {
+        console.log('📦 Using cached earnings data for', cacheKey);
+        onSlotClick(day, hour.toString(), earningsCache.get(cacheKey)!);
+        setLoading(false);
+        return;
+      }
+
+      // Format time for API call
+      const formatTime = (h: number) => {
+        if (h === 0) return '12:00 AM';
+        if (h < 12) return `${h}:00 AM`;
+        if (h === 12) return '12:00 PM';
+        return `${h - 12}:00 PM`;
+      };
+
+      const startTime = formatTime(hour);
+      const endTime = formatTime(hour + 1);
+
+      // Calculate the date for this specific day
+      const dayIndex = days.indexOf(day);
+      const slotDate = weekDates[dayIndex];
+      const dateStr = slotDate.toISOString().split('T')[0];
+
+      // Build base URL params
+      const buildUrl = (endpoint: string) => {
+        let url = `${API_BASE_URL}${endpoint}?`;
+        if (location.coordinates) {
+          url += `lat=${location.coordinates.lat}&lng=${location.coordinates.lng}&`;
+        } else {
+          url += `location=${encodeURIComponent(location.cityName)}&`;
+        }
+        url += `date=${dateStr}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
+        return url;
+      };
+
+      // TWO-PHASE LOADING: Fast preview → Accurate data
+
+      // PHASE 1: Fetch lightweight data first (< 50ms)
+      console.log('⚡ Phase 1: Fetching lightweight preview...');
+      const lightweightUrl = buildUrl('/api/earnings/lightweight');
+
+      try {
+        const lightResponse = await fetch(lightweightUrl);
+        if (lightResponse.ok) {
+          const lightData = await lightResponse.json();
+          
+          // Check if this is fallback data
+          if (lightData.metadata?.fallback || lightData.fallback) {
+            console.warn('⚠️ Using fallback earnings data - Python scraper API is not running. Start it with: cd scrapper && python api_server.py');
+          }
+          const lightRecommendations: GigOpportunity[] = aggregateToCategories(lightData.predictions, hour);
+
+          // Show lightweight data immediately
+          onSlotClick(day, hour.toString(), lightRecommendations);
+          setLoading(false);
+          console.log('✅ Phase 1 complete: Showing lightweight preview');
+        }
+      } catch (err) {
+        console.log('⚠️ Phase 1 failed, skipping to Phase 2');
+      }
+
+      // PHASE 2: Fetch full scraper data in background (3-10s)
+      console.log('🔍 Phase 2: Fetching full scraper data...');
+      const scraperUrl = buildUrl('/api/earnings');
+
+      const response = await fetch(scraperUrl);
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      console.log('✅ API Data received:', data);
-      onSlotClick(day, hour.toString(), data.recommendations);
-    } catch (error) {
-      console.error('❌ Error fetching recommendations:', error);
-      console.log('🔄 Using fallback mock data for hour:', hour);
       
+      // Check if this is fallback data
+      if (data.fallback) {
+        console.warn('⚠️ Using fallback earnings data - Python scraper API is not running. Start it with: cd scrapper && python api_server.py');
+      } else {
+        console.log('✅ Phase 2 complete: Full scraper data received');
+      }
+
+      // Transform and aggregate into two categories
+      const recommendations: GigOpportunity[] = aggregateToCategories(data.predictions, hour);
+
+      // Cache the full scraper results
+      setEarningsCache(prev => {
+        const newCache = new Map(prev);
+        newCache.set(cacheKey, recommendations);
+        return newCache;
+      });
+
+      // Update UI with accurate scraper data
+      onSlotClick(day, hour.toString(), recommendations);
+      console.log('🎯 Updated UI with accurate scraper predictions');
+    } catch (error) {
+      console.error('❌ Error fetching earnings:', error);
+      console.log('🔄 Using fallback mock data for hour:', hour);
+
       // Fallback mock data with proper time formatting
       const formatTime = (h: number) => {
         if (h === 0) return '12:00 AM';
@@ -64,13 +235,14 @@ const Calendar: React.FC<CalendarProps> = ({
         if (h === 12) return '12:00 PM';
         return `${h - 12}:00 PM`;
       };
-      
-      const mockRecommendations: GigOpportunity[] = [
-        { service: 'Uber', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$25 - $35', color: '#4285F4' },
-        { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#4285F4' },
-        { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700' }
+
+      const mockPreds = [
+        { service: 'Uber', min: 25, max: 35, color: '#4285F4', hotspot: 'Downtown Core', demandScore: 0.75 },
+        { service: 'Lyft', min: 22, max: 32, color: '#FF00BF', hotspot: 'Downtown Core', demandScore: 0.72 },
+        { service: 'DoorDash', min: 18, max: 28, color: '#FFD700', hotspot: 'Restaurant Districts', demandScore: 0.70 }
       ];
-      console.log('🎭 Mock recommendations:', mockRecommendations);
+      const mockRecommendations = aggregateToCategories(mockPreds as any, hour);
+      console.log('🎭 Mock recommendations (aggregated):', mockRecommendations);
       onSlotClick(day, hour.toString(), mockRecommendations);
     } finally {
       setLoading(false);
@@ -127,14 +299,21 @@ const Calendar: React.FC<CalendarProps> = ({
           <h1 className="text-3xl font-bold text-gray-900">Weekly Shift Recommendations</h1>
           <div className="flex items-center space-x-4">
             <button
+              onClick={onImportGcal}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+            >
+              📅 Import Gcal
+            </button>
+            <button
               onClick={async () => {
                 try {
-                  const testUrl = `${API_BASE_URL}/api/test`;
+                  const testUrl = `${API_BASE_URL}/api/health`;
                   console.log('🧪 Testing API:', testUrl);
                   const response = await fetch(testUrl);
+                  if (!response.ok) throw new Error(`Status ${response.status}`);
                   const data = await response.json();
-                  console.log('✅ API Test Result:', data);
-                  alert(`API Test: ${data.message}`);
+                  console.log('✅ API Health Result:', data);
+                  alert(`API Health: ${data.status}`);
                 } catch (error) {
                   console.error('❌ API Test Failed:', error);
                   alert('API Test Failed - Check console for details');
@@ -204,16 +383,29 @@ const Calendar: React.FC<CalendarProps> = ({
                 const isSelected = selectedSlotKey === slotKey;
                 const bookedShift = getBookedShift(dayName, hour);
                 const shiftKey = getShiftKey(dayName, hour);
+                const isGcalBusy = gcalBusySlotKeys.has(slotKey);
+                
+                // Debug logging (only log once per render)
+                if (dayIndex === 0 && hour === 6 && gcalBusySlotKeys.size > 0) {
+                  console.log('📅 Checking GCal busy slots:', {
+                    totalBusySlots: gcalBusySlotKeys.size,
+                    exampleSlotKeys: Array.from(gcalBusySlotKeys).slice(0, 5),
+                    currentSlotKey: slotKey,
+                    isGcalBusy: isGcalBusy
+                  });
+                }
                 
                 return (
                   <div
                     key={`${dayIndex}-${hour}`}
                     className={`border-r border-gray-200 border-t border-gray-200 h-12 cursor-pointer transition-colors relative ${
-                      bookedShift 
-                        ? 'bg-green-100 hover:bg-green-200' 
-                        : isSelected 
-                          ? 'bg-blue-100 hover:bg-blue-200' 
-                          : 'bg-white hover:bg-blue-50'
+                      isGcalBusy
+                        ? 'bg-gray-400 hover:bg-gray-500' 
+                        : bookedShift 
+                          ? 'bg-green-100 hover:bg-green-200' 
+                          : isSelected 
+                            ? 'bg-blue-100 hover:bg-blue-200' 
+                            : 'bg-white hover:bg-blue-50'
                     }`}
                     onClick={() => handleSlotClick(dayName, hour)}
                   >
@@ -223,7 +415,7 @@ const Calendar: React.FC<CalendarProps> = ({
                       </div>
                     )}
                     
-                    {bookedShift && !loading && (
+                    {!isGcalBusy && bookedShift && !loading && (
                       <div className="h-full flex flex-col justify-center p-1">
                         <div className="text-xs font-medium text-gray-900 truncate">
                           {bookedShift.service}

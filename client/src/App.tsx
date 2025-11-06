@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import Calendar from './components/Calendar';
-import SidePanel from './components/SidePanel';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import ComingSoonPage from './components/ComingSoonPage';
 import ShiftsPage from './components/ShiftsPage';
+import { LocationState } from './components/LocationInput';
 
 export interface GigOpportunity {
   service: string;
@@ -12,6 +11,12 @@ export interface GigOpportunity {
   endTime: string;
   projectedEarnings: string;
   color: string;
+  min?: number;
+  max?: number;
+  hotspot?: string;
+  demandScore?: number;
+  tripsPerHour?: number;
+  surgeMultiplier?: number;
 }
 
 export interface SelectedSlot {
@@ -86,6 +91,13 @@ function ShiftsPageWrapper() {
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [bookedShiftsByWeek, setBookedShiftsByWeek] = useState<Map<string, Map<string, BookedShift>>>(new Map());
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [gcalBusyByWeek, setGcalBusyByWeek] = useState<Map<string, Set<string>>>(new Map());
+  // Location state now includes coordinates and city name
+  const [location, setLocation] = useState<LocationState>({
+    coordinates: { lat: 37.7749, lng: -122.4194 }, // Default to SF
+    cityName: 'San Francisco'
+  });
+  const [isLocationLoading, setIsLocationLoading] = useState(false);
 
   const getWeekKey = (date: Date): string => {
     const startOfWeek = new Date(date);
@@ -144,6 +156,70 @@ function ShiftsPageWrapper() {
     setSelectedSlotKey(null);
   };
 
+  const handleImportGcal = async () => {
+    try {
+      console.log('📅 Starting Google Calendar import...');
+      console.log('📅 Current week:', currentWeek.toLocaleDateString());
+      
+      const { computeWeekRange, fetchBusyIntervals, busyIntervalsToSlotKeys } = await import('./services/googleCalendarService');
+      const { start, end } = computeWeekRange(currentWeek);
+      const startIso = start.toISOString();
+      const endIso = end.toISOString();
+      
+      console.log('📅 Fetching busy intervals for week:', {
+        start: start.toLocaleString(),
+        end: end.toLocaleString(),
+        startIso,
+        endIso
+      });
+      
+      const busy = await fetchBusyIntervals(startIso, endIso);
+      
+      if (busy.length === 0) {
+        alert('No busy times found in your Google Calendar for this week. Make sure you have events scheduled and try again.');
+        console.log('⚠️ No busy intervals found in Google Calendar');
+        return;
+      }
+      
+      const slotKeys = busyIntervalsToSlotKeys(busy, start);
+      const weekKey = getWeekKey(currentWeek);
+      
+      console.log('📅 Imported GCal data:', {
+        busyIntervals: busy.length,
+        slotKeysCount: slotKeys.size,
+        slotKeys: Array.from(slotKeys).slice(0, 20),
+        weekKey
+      });
+      
+      setGcalBusyByWeek(prev => {
+        const next = new Map(prev);
+        next.set(weekKey, slotKeys);
+        console.log('📅 Updated GCal busy state:', {
+          weekKey,
+          slotKeysCount: slotKeys.size,
+          allWeekKeys: Array.from(next.keys())
+        });
+        return next;
+      });
+      
+      alert(`✅ Google Calendar imported successfully!\n\nFound ${busy.length} busy intervals\nMarking ${slotKeys.size} time slots as busy\n\nGray blocks now show your unavailable times.`);
+    } catch (e) {
+      console.error('❌ Failed to import Google Calendar:', e);
+      alert(`Could not import Google Calendar: ${e instanceof Error ? e.message : 'Unknown error'}\n\nCheck the console for details.`);
+    }
+  };
+
+  const handleLocationChange = async (newLocation: LocationState) => {
+    console.log('📍 Location changed:', newLocation);
+    setIsLocationLoading(true);
+    setLocation(newLocation);
+    // Clear selected slot when location changes
+    setSelectedSlot(null);
+    setSelectedSlotKey(null);
+    // The Calendar component will automatically refetch with new location
+    setTimeout(() => setIsLocationLoading(false), 1000);
+  };
+
   const calculateWeeklyEarnings = (): { min: number; max: number } => {
     let totalMin = 0;
     let totalMax = 0;
@@ -185,6 +261,22 @@ function ShiftsPageWrapper() {
       weeklyEarnings={weeklyEarnings}
       selectedSlot={selectedSlot}
       onBookSlot={handleBookSlot}
+      location={location}
+      onLocationChange={handleLocationChange}
+      isLocationLoading={isLocationLoading}
+      gcalBusySlotKeys={(() => {
+        const weekKey = getWeekKey(currentWeek);
+        const busySlots = gcalBusyByWeek.get(weekKey) || new Set();
+        if (busySlots.size > 0) {
+          console.log('📅 Passing GCal busy slots to Calendar:', {
+            weekKey,
+            busySlotsCount: busySlots.size,
+            busySlots: Array.from(busySlots).slice(0, 10)
+          });
+        }
+        return busySlots;
+      })()}
+      onImportGcal={handleImportGcal}
     />
   );
 }
