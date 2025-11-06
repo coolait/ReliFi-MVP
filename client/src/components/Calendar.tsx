@@ -34,6 +34,74 @@ const Calendar: React.FC<CalendarProps> = ({
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
 
+  // Map a raw service name to one of the two categories
+  const mapServiceToCategory = (service: string): 'Rideshare' | 'Food Delivery' => {
+    const s = service.toLowerCase();
+    if (s.includes('uber') && !s.includes('eats')) return 'Rideshare';
+    if (s.includes('lyft')) return 'Rideshare';
+    if (s.includes('rideshare')) return 'Rideshare';
+    // Everything else we consider Food Delivery for now
+    return 'Food Delivery';
+  };
+
+  // Aggregate multiple predictions into the two categories
+  const aggregateToCategories = (predictions: any[], hour: number): GigOpportunity[] => {
+    type Acc = {
+      count: number;
+      minSum: number;
+      maxSum: number;
+      color: string;
+    };
+    const acc: Record<'Rideshare' | 'Food Delivery', Acc> = {
+      'Rideshare': { count: 0, minSum: 0, maxSum: 0, color: '#4285F4' },
+      'Food Delivery': { count: 0, minSum: 0, maxSum: 0, color: '#FFD700' }
+    };
+
+    for (let i = 0; i < predictions.length; i++) {
+      const p = predictions[i];
+      const category = mapServiceToCategory(p.service || '');
+      const minVal = typeof p.min === 'number' ? p.min : parseInt((p.min || '0').toString());
+      const maxVal = typeof p.max === 'number' ? p.max : parseInt((p.max || '0').toString());
+      acc[category].count += 1;
+      acc[category].minSum += isNaN(minVal) ? 0 : minVal;
+      acc[category].maxSum += isNaN(maxVal) ? 0 : maxVal;
+    }
+
+    const formatTime = (h: number) => {
+      if (h === 0) return '12:00 AM';
+      if (h < 12) return `${h}:00 AM`;
+      if (h === 12) return '12:00 PM';
+      return `${h - 12}:00 PM`;
+    };
+
+    const startTime = formatTime(hour);
+    const endTime = formatTime(hour + 1);
+
+    const results: GigOpportunity[] = [];
+    (['Rideshare', 'Food Delivery'] as const).forEach((cat) => {
+      if (acc[cat].count > 0) {
+        const avgMin = Math.round(acc[cat].minSum / acc[cat].count);
+        const avgMax = Math.round(acc[cat].maxSum / acc[cat].count);
+        results.push({
+          service: cat,
+          startTime,
+          endTime,
+          projectedEarnings: `$${avgMin} - $${avgMax}`,
+          color: acc[cat].color,
+          min: avgMin,
+          max: avgMax,
+          hotspot: predictions[0]?.hotspot,
+          demandScore: predictions[0]?.demandScore,
+          tripsPerHour: predictions[0]?.tripsPerHour,
+          surgeMultiplier: predictions[0]?.surgeMultiplier
+        } as any);
+      }
+    });
+
+    // If a category had no entries, still include a placeholder with $0 - $0? We'll omit to avoid clutter
+    return results;
+  };
+
   // Clear cache when location changes
   useEffect(() => {
     console.log('📍 Location changed to:', location);
@@ -112,20 +180,7 @@ const Calendar: React.FC<CalendarProps> = ({
           if (lightData.metadata?.fallback || lightData.fallback) {
             console.warn('⚠️ Using fallback earnings data - Python scraper API is not running. Start it with: cd scrapper && python api_server.py');
           }
-          
-          const lightRecommendations: GigOpportunity[] = lightData.predictions.map((pred: any) => ({
-            service: pred.service,
-            startTime: pred.startTime,
-            endTime: pred.endTime,
-            projectedEarnings: `$${pred.min} - $${pred.max}`,
-            color: pred.color,
-            min: pred.min,
-            max: pred.max,
-            hotspot: pred.hotspot,
-            demandScore: pred.demandScore,
-            tripsPerHour: pred.tripsPerHour,
-            surgeMultiplier: pred.surgeMultiplier
-          }));
+          const lightRecommendations: GigOpportunity[] = aggregateToCategories(lightData.predictions, hour);
 
           // Show lightweight data immediately
           onSlotClick(day, hour.toString(), lightRecommendations);
@@ -156,20 +211,8 @@ const Calendar: React.FC<CalendarProps> = ({
         console.log('✅ Phase 2 complete: Full scraper data received');
       }
 
-      // Transform the predictions into GigOpportunity format
-      const recommendations: GigOpportunity[] = data.predictions.map((pred: any) => ({
-        service: pred.service,
-        startTime: pred.startTime,
-        endTime: pred.endTime,
-        projectedEarnings: `$${pred.min} - $${pred.max}`,
-        color: pred.color,
-        min: pred.min,
-        max: pred.max,
-        hotspot: pred.hotspot,
-        demandScore: pred.demandScore,
-        tripsPerHour: pred.tripsPerHour,
-        surgeMultiplier: pred.surgeMultiplier
-      }));
+      // Transform and aggregate into two categories
+      const recommendations: GigOpportunity[] = aggregateToCategories(data.predictions, hour);
 
       // Cache the full scraper results
       setEarningsCache(prev => {
@@ -193,12 +236,13 @@ const Calendar: React.FC<CalendarProps> = ({
         return `${h - 12}:00 PM`;
       };
 
-      const mockRecommendations: GigOpportunity[] = [
-        { service: 'Uber', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$25 - $35', color: '#4285F4', min: 25, max: 35, hotspot: 'Downtown Core', demandScore: 0.75 },
-        { service: 'Lyft', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$22 - $32', color: '#FF00BF', min: 22, max: 32, hotspot: 'Downtown Core', demandScore: 0.72 },
-        { service: 'DoorDash', startTime: formatTime(hour), endTime: formatTime(hour + 1), projectedEarnings: '$18 - $28', color: '#FFD700', min: 18, max: 28, hotspot: 'Restaurant Districts', demandScore: 0.70 }
+      const mockPreds = [
+        { service: 'Uber', min: 25, max: 35, color: '#4285F4', hotspot: 'Downtown Core', demandScore: 0.75 },
+        { service: 'Lyft', min: 22, max: 32, color: '#FF00BF', hotspot: 'Downtown Core', demandScore: 0.72 },
+        { service: 'DoorDash', min: 18, max: 28, color: '#FFD700', hotspot: 'Restaurant Districts', demandScore: 0.70 }
       ];
-      console.log('🎭 Mock recommendations:', mockRecommendations);
+      const mockRecommendations = aggregateToCategories(mockPreds as any, hour);
+      console.log('🎭 Mock recommendations (aggregated):', mockRecommendations);
       onSlotClick(day, hour.toString(), mockRecommendations);
     } finally {
       setLoading(false);

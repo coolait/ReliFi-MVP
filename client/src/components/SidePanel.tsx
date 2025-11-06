@@ -24,6 +24,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
 
   const getServiceColor = (service: string) => {
     switch (service.toLowerCase()) {
+      case 'rideshare':
+        return 'bg-uber-blue';
+      case 'food delivery':
+        return 'bg-doordash-yellow';
       case 'uber':
       case 'lyft':
         return 'bg-uber-blue';
@@ -40,6 +44,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
 
   const getServiceTextColor = (service: string) => {
     switch (service.toLowerCase()) {
+      case 'rideshare':
+        return 'text-white';
+      case 'food delivery':
+        return 'text-gray-900';
       case 'uber':
       case 'lyft':
         return 'text-white';
@@ -55,8 +63,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
   };
 
   return (
-    <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="w-80 bg-gray-50 border-l border-gray-200">
+      {/* Spacer to align with calendar grid: LocationInput section + Calendar padding + Calendar header */}
+      <div className="p-6">
+        {/* Match LocationInput section (p-6) + Calendar header section height */}
+        <div className="mb-6" style={{ minHeight: '408px' }}></div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-2">
           {recommendations[0]?.service || 'Gig'} Shift
         </h2>
@@ -186,6 +198,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ selectedSlot, onBookSlot }) => {
           >
             🔄 Reset Session Tracking
           </button> */}
+        </div>
         </div>
       </div>
     </div>

@@ -61,10 +61,12 @@ const ShiftsPage: React.FC<ShiftsPageProps> = ({
         />
       </div>
       {selectedSlot && (
-        <SidePanel
-          selectedSlot={selectedSlot}
-          onBookSlot={onBookSlot}
-        />
+        <div className="flex-shrink-0">
+          <SidePanel
+            selectedSlot={selectedSlot}
+            onBookSlot={onBookSlot}
+          />
+        </div>
       )}
     </div>
   );
