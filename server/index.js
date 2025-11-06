@@ -145,12 +145,17 @@ app.get('/api/earnings/lightweight', async (req, res) => {
     // Call Python lightweight API
     const response = await axios.get(`${PYTHON_API_URL}/api/earnings/lightweight`, {
       params: { location, date, startTime, endTime, service },
-      timeout: 5000 // 5 second timeout (should be < 50ms)
+      timeout: 3000 // 3 second timeout
     });
 
     res.json(response.data);
   } catch (error) {
-    console.error('Error calling Python lightweight API:', error.message);
+    // Handle timeout and connection errors gracefully
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      console.warn('⚠️ Python API not available or timeout - using fallback data');
+    } else {
+      console.error('Error calling Python lightweight API:', error.message);
+    }
 
     // Fallback to basic estimates
     const hour = parseInt(req.query.startTime?.split(':')[0] || '9');
@@ -222,12 +227,17 @@ app.get('/api/earnings', async (req, res) => {
     // Call Python API
     const response = await axios.get(`${PYTHON_API_URL}/api/earnings`, {
       params: { location, date, startTime, endTime, service },
-      timeout: 30000 // 30 second timeout
+      timeout: 10000 // 10 second timeout
     });
 
     res.json(response.data);
   } catch (error) {
-    console.error('Error calling Python earnings API:', error.message);
+    // Handle timeout and connection errors gracefully
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      console.warn('⚠️ Python API not available or timeout - using fallback data');
+    } else {
+      console.error('Error calling Python earnings API:', error.message);
+    }
 
     // Fallback to mock data if Python API is unavailable
     const hour = parseInt(req.query.startTime?.split(':')[0] || '9');
@@ -300,16 +310,29 @@ app.get('/api/earnings/week', async (req, res) => {
 
     const response = await axios.get(`${PYTHON_API_URL}/api/earnings/week`, {
       params: { location, startDate },
-      timeout: 90000 // 90 second timeout for week data
+      timeout: 120000 // 2 minute timeout for week data
     });
 
     res.json(response.data);
   } catch (error) {
-    console.error('Error calling Python week earnings API:', error.message);
-    res.status(500).json({
-      error: 'Failed to fetch week earnings data',
-      message: error.message
-    });
+    // Handle timeout and connection errors gracefully - return fallback structure
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      console.warn('⚠️ Python API not available or timeout for weekly data - returning fallback structure');
+      // Return empty structure so frontend can generate fallback data
+      res.json({
+        location: location || 'San Francisco',
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        weekData: {},
+        fallback: true
+      });
+    } else {
+      console.error('Error calling Python week earnings API:', error.message);
+      res.status(500).json({
+        error: 'Failed to fetch week earnings data',
+        message: error.message,
+        fallback: true
+      });
+    }
   }
 });
 
