@@ -14,6 +14,7 @@ import datetime
 import json
 from functools import lru_cache
 import hashlib
+import os
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -689,5 +690,10 @@ if __name__ == '__main__':
     print("TIP: Use /lightweight endpoint for instant UI responses!")
     print("=" * 60)
 
-    # Run in development mode on port 5002 (different from Express server on 5001)
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    # Get port from environment variable (Railway/Heroku) or default to 5002 for local
+    port = int(os.environ.get('PORT', 5002))
+    # Disable debug mode in production (Railway sets RAILWAY_ENVIRONMENT)
+    debug_mode = os.environ.get('RAILWAY_ENVIRONMENT') != 'production'
+    
+    print(f"Starting server on port {port} (debug={debug_mode})")
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
