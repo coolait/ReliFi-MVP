@@ -98,24 +98,37 @@ def get_engine(database_url=None):
     """
     Create database engine
     Uses environment variable or provided URL
+    Returns None if database is not available (for optional database usage)
     """
     if database_url is None:
-        database_url = os.getenv(
-            'DATABASE_URL',
-            'postgresql://localhost:5432/rideshare_data'
-        )
-
-    return create_engine(database_url, echo=False)
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            # No database configured - return None (optional database)
+            return None
+    
+    try:
+        return create_engine(database_url, echo=False, connect_args={'connect_timeout': 5})
+    except Exception as e:
+        # If database connection fails, return None (optional database)
+        print(f"Warning: Database connection failed: {e}")
+        return None
 
 
 def init_database(database_url=None):
     """
     Initialize database schema
     Creates all tables if they don't exist
+    Returns None if database is not available (optional database)
     """
     engine = get_engine(database_url)
-    Base.metadata.create_all(engine)
-    return engine
+    if engine is None:
+        return None
+    try:
+        Base.metadata.create_all(engine)
+        return engine
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+        return None
 
 
 def get_session(engine=None):
