@@ -7,14 +7,21 @@ Supports: Uber, Lyft (rideshare) and DoorDash, Uber Eats, GrubHub (delivery)
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from scrape import UberEarningsForecaster
-from delivery_forecaster import DeliveryEarningsForecaster
-from config import *
 import datetime
 import json
 from functools import lru_cache
 import hashlib
 import os
+
+# Lazy imports - only import when needed to avoid startup crashes
+try:
+    from config import *
+except ImportError as e:
+    print(f"Warning: Could not import config: {e}")
+    # Set minimal defaults
+    DEMAND_TIME_FACTORS = {h: 0.5 for h in range(24)}
+    DELIVERY_DEMAND_TIME_FACTORS = {h: 0.5 for h in range(24)}
+    GAS_PRICE_PER_GALLON = 5.25
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -22,19 +29,48 @@ CORS(app)  # Enable CORS for all routes
 # Global forecaster instances (reused for efficiency)
 rideshare_forecaster = None
 delivery_forecaster = None
+_forecasters_available = False
+
+def _check_forecasters():
+    """Check if forecasters can be imported"""
+    global _forecasters_available
+    if _forecasters_available:
+        return True
+    try:
+        from scrape import UberEarningsForecaster
+        from delivery_forecaster import DeliveryEarningsForecaster
+        _forecasters_available = True
+        return True
+    except ImportError as e:
+        print(f"Warning: Forecasters not available: {e}")
+        return False
 
 def get_rideshare_forecaster():
     """Get or create rideshare forecaster instance"""
     global rideshare_forecaster
+    if not _check_forecasters():
+        return None
     if rideshare_forecaster is None:
-        rideshare_forecaster = UberEarningsForecaster()
+        try:
+            from scrape import UberEarningsForecaster
+            rideshare_forecaster = UberEarningsForecaster()
+        except Exception as e:
+            print(f"Warning: Could not create rideshare forecaster: {e}")
+            return None
     return rideshare_forecaster
 
 def get_delivery_forecaster():
     """Get or create delivery forecaster instance"""
     global delivery_forecaster
+    if not _check_forecasters():
+        return None
     if delivery_forecaster is None:
-        delivery_forecaster = DeliveryEarningsForecaster()
+        try:
+            from delivery_forecaster import DeliveryEarningsForecaster
+            delivery_forecaster = DeliveryEarningsForecaster()
+        except Exception as e:
+            print(f"Warning: Could not create delivery forecaster: {e}")
+            return None
     return delivery_forecaster
 
 def is_delivery_service(service):
@@ -357,181 +393,258 @@ def get_earnings():
         # ========== RIDESHARE CALCULATIONS ==========
         if needs_rideshare:
             fc = get_rideshare_forecaster()
-
-            # Run rideshare forecast
-            events_data = fc.scrape_events(date_str, target_hour)
-            weather_multiplier = fc.scrape_weather(date_str)
-            traffic_data = fc.scrape_traffic()
-            pricing_data = fc.scrape_uber_pricing()
-            gas_data = fc.scrape_gas_prices()
-
-            # Calculate demand and supply
-            demand = fc.estimate_demand(events_data, weather_multiplier, target_hour)
-            supply = fc.estimate_driver_supply(target_hour)
-
-            # Calculate deadtime
-            demand_supply_ratio = demand / supply if supply > 0 else 0
-            deadtime_data = fc.calculate_deadtime(target_hour, traffic_data, demand_supply_ratio)
-
-            # Calculate earnings
-            earnings_per_trip = fc.estimate_trip_earnings(pricing_data, traffic_data, target_hour)
-            costs = fc.estimate_costs(gas_data, traffic_data, deadtime_data)
-            results = fc.calculate_net_earnings(demand, supply, earnings_per_trip, costs, target_hour, deadtime_data)
-
-            # Determine hotspot based on demand
-            hotspot = "Downtown Core"
-            if demand_supply_ratio > 1.5:
-                hotspot = "Financial District"
-            elif demand_supply_ratio > 1.2:
-                hotspot = "Downtown Core"
-            elif demand_supply_ratio > 0.8:
-                hotspot = "Mission District"
-            else:
-                hotspot = "Various Areas"
-
-            # Calculate demand score (0-1)
-            demand_score = min(1.0, demand_supply_ratio / 2.0)
-
-            # Uber prediction
-            if service_filter in ['all', 'Uber']:
-                uber_min = max(10, results['net_hourly_earnings'] - 5)
-                uber_max = results['net_hourly_earnings'] + 5
+            if fc is None:
+                # Fallback to lightweight estimates if forecaster unavailable
+                print("Warning: Rideshare forecaster unavailable, using fallback")
+                rideshare_time_factor = DEMAND_TIME_FACTORS.get(target_hour, 0.5)
+                base_earnings = 25 * rideshare_time_factor * 1.2
                 predictions.append({
                     'service': 'Uber',
-                    'min': round(uber_min, 2),
-                    'max': round(uber_max, 2),
-                    'hotspot': hotspot,
-                    'demandScore': round(demand_score, 2),
-                    'tripsPerHour': round(results['trips_per_driver'], 2),
-                    'surgeMultiplier': round(results['surge_multiplier'], 2),
-                    'color': '#4285F4',  # Uber blue
+                    'min': round(max(10, base_earnings - 5), 2),
+                    'max': round(base_earnings + 5, 2),
+                    'hotspot': 'Downtown Core',
+                    'demandScore': round(min(1.0, rideshare_time_factor), 2),
+                    'tripsPerHour': round(2.0 * rideshare_time_factor, 2),
+                    'surgeMultiplier': 1.0,
+                    'color': '#4285F4',
                     'startTime': format_hour_to_time(target_hour),
                     'endTime': format_hour_to_time(target_hour + 1)
                 })
+                if service_filter in ['all', 'Lyft']:
+                    predictions.append({
+                        'service': 'Lyft',
+                        'min': round(max(10, (base_earnings - 5) * 0.92), 2),
+                        'max': round((base_earnings + 5) * 0.92, 2),
+                        'hotspot': 'Downtown Core',
+                        'demandScore': round(min(1.0, rideshare_time_factor * 0.95), 2),
+                        'tripsPerHour': round(2.0 * rideshare_time_factor * 0.9, 2),
+                        'surgeMultiplier': 0.95,
+                        'color': '#FF00BF',
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+            else:
+                # Run rideshare forecast
+                events_data = fc.scrape_events(date_str, target_hour)
+                weather_multiplier = fc.scrape_weather(date_str)
+                traffic_data = fc.scrape_traffic()
+                pricing_data = fc.scrape_uber_pricing()
+                gas_data = fc.scrape_gas_prices()
 
-            # Lyft prediction
-            if service_filter in ['all', 'Lyft']:
-                lyft_adjustment = 0.92  # Lyft typically pays ~8% less
-                lyft_min = max(10, (results['net_hourly_earnings'] - 5) * lyft_adjustment)
-                lyft_max = (results['net_hourly_earnings'] + 5) * lyft_adjustment
-                predictions.append({
-                    'service': 'Lyft',
-                    'min': round(lyft_min, 2),
-                    'max': round(lyft_max, 2),
-                    'hotspot': hotspot,
-                    'demandScore': round(demand_score * 0.95, 2),
-                    'tripsPerHour': round(results['trips_per_driver'] * 0.9, 2),
-                    'surgeMultiplier': round(results['surge_multiplier'] * 0.95, 2),
-                    'color': '#FF00BF',  # Lyft pink
-                    'startTime': format_hour_to_time(target_hour),
-                    'endTime': format_hour_to_time(target_hour + 1)
-                })
+                # Calculate demand and supply
+                demand = fc.estimate_demand(events_data, weather_multiplier, target_hour)
+                supply = fc.estimate_driver_supply(target_hour)
 
-            metadata['rideshare'] = {
-                'demandEstimate': round(demand, 0),
-                'driverSupply': round(supply, 0),
-                'demandSupplyRatio': round(demand_supply_ratio, 2),
-                'trafficLevel': traffic_data['congestion_level'] if isinstance(traffic_data, dict) else 0.5
-            }
+                # Calculate deadtime
+                demand_supply_ratio = demand / supply if supply > 0 else 0
+                deadtime_data = fc.calculate_deadtime(target_hour, traffic_data, demand_supply_ratio)
+
+                # Calculate earnings
+                earnings_per_trip = fc.estimate_trip_earnings(pricing_data, traffic_data, target_hour)
+                costs = fc.estimate_costs(gas_data, traffic_data, deadtime_data)
+                results = fc.calculate_net_earnings(demand, supply, earnings_per_trip, costs, target_hour, deadtime_data)
+
+                # Determine hotspot based on demand
+                hotspot = "Downtown Core"
+                if demand_supply_ratio > 1.5:
+                    hotspot = "Financial District"
+                elif demand_supply_ratio > 1.2:
+                    hotspot = "Downtown Core"
+                elif demand_supply_ratio > 0.8:
+                    hotspot = "Mission District"
+                else:
+                    hotspot = "Various Areas"
+
+                # Calculate demand score (0-1)
+                demand_score = min(1.0, demand_supply_ratio / 2.0)
+
+                # Uber prediction
+                if service_filter in ['all', 'Uber']:
+                    uber_min = max(10, results['net_hourly_earnings'] - 5)
+                    uber_max = results['net_hourly_earnings'] + 5
+                    predictions.append({
+                        'service': 'Uber',
+                        'min': round(uber_min, 2),
+                        'max': round(uber_max, 2),
+                        'hotspot': hotspot,
+                        'demandScore': round(demand_score, 2),
+                        'tripsPerHour': round(results['trips_per_driver'], 2),
+                        'surgeMultiplier': round(results['surge_multiplier'], 2),
+                        'color': '#4285F4',  # Uber blue
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+
+                # Lyft prediction
+                if service_filter in ['all', 'Lyft']:
+                    lyft_adjustment = 0.92  # Lyft typically pays ~8% less
+                    lyft_min = max(10, (results['net_hourly_earnings'] - 5) * lyft_adjustment)
+                    lyft_max = (results['net_hourly_earnings'] + 5) * lyft_adjustment
+                    predictions.append({
+                        'service': 'Lyft',
+                        'min': round(lyft_min, 2),
+                        'max': round(lyft_max, 2),
+                        'hotspot': hotspot,
+                        'demandScore': round(demand_score * 0.95, 2),
+                        'tripsPerHour': round(results['trips_per_driver'] * 0.9, 2),
+                        'surgeMultiplier': round(results['surge_multiplier'] * 0.95, 2),
+                        'color': '#FF00BF',  # Lyft pink
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+
+                metadata['rideshare'] = {
+                    'demandEstimate': round(demand, 0),
+                    'driverSupply': round(supply, 0),
+                    'demandSupplyRatio': round(demand_supply_ratio, 2),
+                    'trafficLevel': traffic_data['congestion_level'] if isinstance(traffic_data, dict) else 0.5
+                }
 
         # ========== DELIVERY CALCULATIONS ==========
         if needs_delivery:
             fc_delivery = get_delivery_forecaster()
+            if fc_delivery is None:
+                # Fallback to lightweight estimates if forecaster unavailable
+                print("Warning: Delivery forecaster unavailable, using fallback")
+                delivery_time_factor = DELIVERY_DEMAND_TIME_FACTORS.get(target_hour, 0.5)
+                base_delivery_earnings = 22 * delivery_time_factor * 1.3
+                delivery_demand_score = min(1.0, delivery_time_factor)
+                delivery_trips = 2.5 * delivery_time_factor
+                
+                if service_filter in ['all', 'DoorDash']:
+                    predictions.append({
+                        'service': 'DoorDash',
+                        'min': round(max(12, base_delivery_earnings - 6), 2),
+                        'max': round(base_delivery_earnings + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_demand_score, 2),
+                        'tripsPerHour': round(delivery_trips, 2),
+                        'surgeMultiplier': 1.0,
+                        'color': '#FFD700',
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+                if service_filter in ['all', 'UberEats']:
+                    predictions.append({
+                        'service': 'UberEats',
+                        'min': round(max(12, base_delivery_earnings * 0.95 - 6), 2),
+                        'max': round(base_delivery_earnings * 0.95 + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_demand_score * 0.95, 2),
+                        'tripsPerHour': round(delivery_trips * 0.95, 2),
+                        'surgeMultiplier': 1.0,
+                        'color': '#06C167',
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+                if service_filter in ['all', 'GrubHub']:
+                    predictions.append({
+                        'service': 'GrubHub',
+                        'min': round(max(12, base_delivery_earnings * 1.05 - 6), 2),
+                        'max': round(base_delivery_earnings * 1.05 + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_demand_score, 2),
+                        'tripsPerHour': round(delivery_trips, 2),
+                        'surgeMultiplier': 1.0,
+                        'color': '#FF8000',
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
+            else:
+                # Run delivery forecast
+                delivery_events = fc_delivery.scrape_events(date_str, target_hour)
+                delivery_weather = fc_delivery.scrape_weather(date_str)
 
-            # Run delivery forecast
-            delivery_events = fc_delivery.scrape_events(date_str, target_hour)
-            delivery_weather = fc_delivery.scrape_weather(date_str)
+                # Get neighborhood for tipping/restaurant density
+                neighborhood = None  # Could be extracted from location string
+                restaurant_density = fc_delivery.scrape_restaurant_density(location, neighborhood)
 
-            # Get neighborhood for tipping/restaurant density
-            neighborhood = None  # Could be extracted from location string
-            restaurant_density = fc_delivery.scrape_restaurant_density(location, neighborhood)
+                # Calculate delivery demand and supply
+                delivery_demand = fc_delivery.estimate_demand(delivery_events, delivery_weather, target_hour, restaurant_density)
+                delivery_supply = fc_delivery.estimate_driver_supply(target_hour)
 
-            # Calculate delivery demand and supply
-            delivery_demand = fc_delivery.estimate_demand(delivery_events, delivery_weather, target_hour, restaurant_density)
-            delivery_supply = fc_delivery.estimate_driver_supply(target_hour)
+                # Calculate delivery deadtime
+                delivery_ratio = delivery_demand / delivery_supply if delivery_supply > 0 else 0
+                delivery_deadtime = fc_delivery.calculate_deadtime(target_hour, delivery_ratio)
 
-            # Calculate delivery deadtime
-            delivery_ratio = delivery_demand / delivery_supply if delivery_supply > 0 else 0
-            delivery_deadtime = fc_delivery.calculate_deadtime(target_hour, delivery_ratio)
+                # Calculate delivery costs
+                delivery_costs = fc_delivery.estimate_costs(GAS_PRICE_PER_GALLON)
 
-            # Calculate delivery costs
-            delivery_costs = fc_delivery.estimate_costs(GAS_PRICE_PER_GALLON)
+                # Calculate demand score for delivery
+                delivery_score = min(1.0, delivery_ratio / 2.0)
 
-            # Calculate demand score for delivery
-            delivery_score = min(1.0, delivery_ratio / 2.0)
+                # DoorDash prediction
+                if service_filter in ['all', 'DoorDash']:
+                    pricing = fc_delivery.scrape_delivery_pricing('doordash')
+                    earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'doordash', neighborhood)
+                    delivery_results = fc_delivery.calculate_net_earnings(
+                        delivery_demand, delivery_supply, earnings_per_delivery,
+                        delivery_costs, target_hour, delivery_deadtime
+                    )
 
-            # DoorDash prediction
-            if service_filter in ['all', 'DoorDash']:
-                pricing = fc_delivery.scrape_delivery_pricing('doordash')
-                earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'doordash', neighborhood)
-                delivery_results = fc_delivery.calculate_net_earnings(
-                    delivery_demand, delivery_supply, earnings_per_delivery,
-                    delivery_costs, target_hour, delivery_deadtime
-                )
+                    predictions.append({
+                        'service': 'DoorDash',
+                        'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
+                        'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_score, 2),
+                        'tripsPerHour': round(delivery_results['deliveries_per_driver'], 2),
+                        'surgeMultiplier': round(delivery_results.get('peak_pay_multiplier', 1.0), 2),
+                        'color': '#FFD700',  # DoorDash gold
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
 
-                predictions.append({
-                    'service': 'DoorDash',
-                    'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
-                    'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
-                    'hotspot': 'Restaurant Districts',
-                    'demandScore': round(delivery_score, 2),
-                    'tripsPerHour': round(delivery_results['deliveries_per_driver'], 2),
-                    'surgeMultiplier': round(delivery_results.get('peak_pay_multiplier', 1.0), 2),
-                    'color': '#FFD700',  # DoorDash gold
-                    'startTime': format_hour_to_time(target_hour),
-                    'endTime': format_hour_to_time(target_hour + 1)
-                })
+                # Uber Eats prediction
+                if service_filter in ['all', 'UberEats']:
+                    pricing = fc_delivery.scrape_delivery_pricing('ubereats')
+                    earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'ubereats', neighborhood)
+                    delivery_results = fc_delivery.calculate_net_earnings(
+                        delivery_demand, delivery_supply, earnings_per_delivery,
+                        delivery_costs, target_hour, delivery_deadtime
+                    )
 
-            # Uber Eats prediction
-            if service_filter in ['all', 'UberEats']:
-                pricing = fc_delivery.scrape_delivery_pricing('ubereats')
-                earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'ubereats', neighborhood)
-                delivery_results = fc_delivery.calculate_net_earnings(
-                    delivery_demand, delivery_supply, earnings_per_delivery,
-                    delivery_costs, target_hour, delivery_deadtime
-                )
+                    predictions.append({
+                        'service': 'UberEats',
+                        'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
+                        'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_score * 0.95, 2),
+                        'tripsPerHour': round(delivery_results['deliveries_per_driver'] * 0.95, 2),
+                        'surgeMultiplier': round(delivery_results.get('peak_pay_multiplier', 1.0), 2),
+                        'color': '#06C167',  # Uber Eats green
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
 
-                predictions.append({
-                    'service': 'UberEats',
-                    'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
-                    'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
-                    'hotspot': 'Restaurant Districts',
-                    'demandScore': round(delivery_score * 0.95, 2),
-                    'tripsPerHour': round(delivery_results['deliveries_per_driver'] * 0.95, 2),
-                    'surgeMultiplier': round(delivery_results.get('peak_pay_multiplier', 1.0), 2),
-                    'color': '#06C167',  # Uber Eats green
-                    'startTime': format_hour_to_time(target_hour),
-                    'endTime': format_hour_to_time(target_hour + 1)
-                })
+                # GrubHub prediction
+                if service_filter in ['all', 'GrubHub']:
+                    pricing = fc_delivery.scrape_delivery_pricing('grubhub')
+                    earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'grubhub', neighborhood)
+                    delivery_results = fc_delivery.calculate_net_earnings(
+                        delivery_demand, delivery_supply, earnings_per_delivery,
+                        delivery_costs, target_hour, delivery_deadtime
+                    )
 
-            # GrubHub prediction
-            if service_filter in ['all', 'GrubHub']:
-                pricing = fc_delivery.scrape_delivery_pricing('grubhub')
-                earnings_per_delivery = fc_delivery.estimate_delivery_earnings(pricing, target_hour, 'grubhub', neighborhood)
-                delivery_results = fc_delivery.calculate_net_earnings(
-                    delivery_demand, delivery_supply, earnings_per_delivery,
-                    delivery_costs, target_hour, delivery_deadtime
-                )
+                    predictions.append({
+                        'service': 'GrubHub',
+                        'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
+                        'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
+                        'hotspot': 'Restaurant Districts',
+                        'demandScore': round(delivery_score, 2),
+                        'tripsPerHour': round(delivery_results['deliveries_per_driver'], 2),
+                        'surgeMultiplier': 1.0,
+                        'color': '#FF8000',  # GrubHub orange
+                        'startTime': format_hour_to_time(target_hour),
+                        'endTime': format_hour_to_time(target_hour + 1)
+                    })
 
-                predictions.append({
-                    'service': 'GrubHub',
-                    'min': round(max(12, delivery_results['net_hourly_earnings'] - 6), 2),
-                    'max': round(delivery_results['net_hourly_earnings'] + 6, 2),
-                    'hotspot': 'Restaurant Districts',
-                    'demandScore': round(delivery_score, 2),
-                    'tripsPerHour': round(delivery_results['deliveries_per_driver'], 2),
-                    'surgeMultiplier': 1.0,
-                    'color': '#FF8000',  # GrubHub orange
-                    'startTime': format_hour_to_time(target_hour),
-                    'endTime': format_hour_to_time(target_hour + 1)
-                })
-
-            metadata['delivery'] = {
-                'demandEstimate': round(delivery_demand, 0),
-                'driverSupply': round(delivery_supply, 0),
-                'demandSupplyRatio': round(delivery_ratio, 2),
-                'restaurantDensity': round(restaurant_density, 2)
-            }
+                metadata['delivery'] = {
+                    'demandEstimate': round(delivery_demand, 0),
+                    'driverSupply': round(delivery_supply, 0),
+                    'demandSupplyRatio': round(delivery_ratio, 2),
+                    'restaurantDensity': round(restaurant_density, 2)
+                }
 
         # Build response
         response_data = {
