@@ -15,6 +15,7 @@ const handleLocationChange = (newLocation: string) => {
 };
 ```
 
+
 **App State (App.tsx):**
 ```typescript
 const handleLocationChange = async (newLocation: string) => {
