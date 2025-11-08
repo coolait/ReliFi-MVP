@@ -23,6 +23,15 @@ except ImportError as e:
     DELIVERY_DEMAND_TIME_FACTORS = {h: 0.5 for h in range(24)}
     GAS_PRICE_PER_GALLON = 5.25
 
+# Import improved scraper
+try:
+    from improved_data_scraper import ImprovedEarningsScraper
+    improved_scraper_available = True
+except ImportError as e:
+    print(f"Warning: Improved scraper not available: {e}")
+    improved_scraper_available = False
+    ImprovedEarningsScraper = None
+
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
@@ -183,108 +192,146 @@ def get_earnings_lightweight():
 
         target_hour = parse_time_to_hour(start_time)
 
-        # Get time factors from config
-        rideshare_time_factor = DEMAND_TIME_FACTORS.get(target_hour, 0.5)
-        delivery_time_factor = DELIVERY_DEMAND_TIME_FACTORS.get(target_hour, 0.5)
-
-        # Calculate base earnings using config defaults (no scraping)
-        # Rideshare: Average SF earnings are ~$25-30/hour
-        base_rideshare_earnings = 25 * rideshare_time_factor * 1.2
-        rideshare_demand_score = min(1.0, rideshare_time_factor)
-        rideshare_trips = 2.0 * rideshare_time_factor
-
-        # Delivery: Average SF earnings are ~$20-25/hour
-        base_delivery_earnings = 22 * delivery_time_factor * 1.3
-        delivery_demand_score = min(1.0, delivery_time_factor)
-        delivery_trips = 2.5 * delivery_time_factor
-
-        # Determine hotspot based on time
-        if target_hour in [7, 8, 17, 18]:  # Commute hours
-            hotspot = "Financial District"
-            surge = 1.2
-        elif target_hour in [12, 13, 18, 19]:  # Meal times
-            hotspot = "Restaurant Districts"
-            surge = 1.15
-        elif target_hour >= 20 or target_hour <= 5:  # Late night
-            hotspot = "Entertainment Areas"
-            surge = 1.1
-        else:
-            hotspot = "Downtown Core"
-            surge = 1.0
-
+        # Use improved scraper if available
         predictions = []
+        use_improved_scraper = False
+        
+        if improved_scraper_available:
+            try:
+                scraper = ImprovedEarningsScraper()
+                lat_val = float(lat) if lat else None
+                lng_val = float(lng) if lng else None
+                
+                # If coordinates provided, try to get city name for better estimates
+                if lat_val and lng_val and not location or location == f"{lat_val:.4f},{lng_val:.4f}":
+                    # Use coordinates directly, scraper will handle geocoding
+                    location_str = location  # Keep as is, scraper will geocode
+                else:
+                    location_str = location
+                
+                # Get all estimates
+                all_estimates = scraper.get_all_estimates(location_str, date_str, target_hour, lat_val, lng_val)
+                
+                # Filter by service if needed
+                for pred in all_estimates['predictions']:
+                    pred_service = pred['service'].lower()
+                    if service_filter == 'all' or pred_service == service_filter.lower():
+                        # Add time formatting
+                        pred['startTime'] = format_hour_to_time(target_hour)
+                        pred['endTime'] = format_hour_to_time(target_hour + 1)
+                        predictions.append(pred)
+                
+                use_improved_scraper = True
+                
+            except Exception as e:
+                print(f"Error using improved scraper: {e}, falling back to basic estimates")
+                import traceback
+                traceback.print_exc()
+                use_improved_scraper = False
+                predictions = []  # Clear any partial predictions
+        
+        # Fallback to basic estimates only if improved scraper completely failed
+        if not use_improved_scraper:
+            # Get time factors from config
+            rideshare_time_factor = DEMAND_TIME_FACTORS.get(target_hour, 0.5)
+            delivery_time_factor = DELIVERY_DEMAND_TIME_FACTORS.get(target_hour, 0.5)
 
-        # Rideshare services
-        if service_filter in ['all', 'Uber']:
-            predictions.append({
-                'service': 'Uber',
-                'min': round(max(10, base_rideshare_earnings - 5), 2),
-                'max': round(base_rideshare_earnings + 5, 2),
-                'hotspot': hotspot,
-                'demandScore': round(rideshare_demand_score, 2),
-                'tripsPerHour': round(rideshare_trips, 2),
-                'surgeMultiplier': round(surge, 2),
-                'color': '#4285F4',
-                'startTime': format_hour_to_time(target_hour),
-                'endTime': format_hour_to_time(target_hour + 1)
-            })
+            # Calculate base earnings using config defaults (no scraping)
+            # Rideshare: Average SF earnings are ~$25-30/hour
+            base_rideshare_earnings = 25 * rideshare_time_factor * 1.2
+            rideshare_demand_score = min(1.0, rideshare_time_factor)
+            rideshare_trips = 2.0 * rideshare_time_factor
 
-        if service_filter in ['all', 'Lyft']:
-            predictions.append({
-                'service': 'Lyft',
-                'min': round(max(10, (base_rideshare_earnings - 5) * 0.92), 2),
-                'max': round((base_rideshare_earnings + 5) * 0.92, 2),
-                'hotspot': hotspot,
-                'demandScore': round(rideshare_demand_score * 0.95, 2),
-                'tripsPerHour': round(rideshare_trips * 0.9, 2),
-                'surgeMultiplier': round(surge * 0.95, 2),
-                'color': '#FF00BF',
-                'startTime': format_hour_to_time(target_hour),
-                'endTime': format_hour_to_time(target_hour + 1)
-            })
+            # Delivery: Average SF earnings are ~$20-25/hour
+            base_delivery_earnings = 22 * delivery_time_factor * 1.3
+            delivery_demand_score = min(1.0, delivery_time_factor)
+            delivery_trips = 2.5 * delivery_time_factor
 
-        # Delivery services
-        if service_filter in ['all', 'DoorDash']:
-            predictions.append({
-                'service': 'DoorDash',
-                'min': round(max(12, base_delivery_earnings - 6), 2),
-                'max': round(base_delivery_earnings + 6, 2),
-                'hotspot': 'Restaurant Districts',
-                'demandScore': round(delivery_demand_score, 2),
-                'tripsPerHour': round(delivery_trips, 2),
-                'surgeMultiplier': round(1.0 + (delivery_time_factor - 0.5) * 0.4, 2),
-                'color': '#FFD700',
-                'startTime': format_hour_to_time(target_hour),
-                'endTime': format_hour_to_time(target_hour + 1)
-            })
+            # Determine hotspot based on time
+            if target_hour in [7, 8, 17, 18]:  # Commute hours
+                hotspot = "Financial District"
+                surge = 1.2
+            elif target_hour in [12, 13, 18, 19]:  # Meal times
+                hotspot = "Restaurant Districts"
+                surge = 1.15
+            elif target_hour >= 20 or target_hour <= 5:  # Late night
+                hotspot = "Entertainment Areas"
+                surge = 1.1
+            else:
+                hotspot = "Downtown Core"
+                surge = 1.0
 
-        if service_filter in ['all', 'UberEats']:
-            predictions.append({
-                'service': 'UberEats',
-                'min': round(max(12, base_delivery_earnings * 0.95 - 6), 2),
-                'max': round(base_delivery_earnings * 0.95 + 6, 2),
-                'hotspot': 'Restaurant Districts',
-                'demandScore': round(delivery_demand_score * 0.95, 2),
-                'tripsPerHour': round(delivery_trips * 0.95, 2),
-                'surgeMultiplier': round(1.0 + (delivery_time_factor - 0.5) * 0.4, 2),
-                'color': '#06C167',
-                'startTime': format_hour_to_time(target_hour),
-                'endTime': format_hour_to_time(target_hour + 1)
-            })
+            # Rideshare services
+            if service_filter in ['all', 'Uber']:
+                predictions.append({
+                    'service': 'Uber',
+                    'min': round(max(10, base_rideshare_earnings - 5), 2),
+                    'max': round(base_rideshare_earnings + 5, 2),
+                    'hotspot': hotspot,
+                    'demandScore': round(rideshare_demand_score, 2),
+                    'tripsPerHour': round(rideshare_trips, 2),
+                    'surgeMultiplier': round(surge, 2),
+                    'color': '#4285F4',
+                    'startTime': format_hour_to_time(target_hour),
+                    'endTime': format_hour_to_time(target_hour + 1)
+                })
 
-        if service_filter in ['all', 'GrubHub']:
-            predictions.append({
-                'service': 'GrubHub',
-                'min': round(max(12, base_delivery_earnings * 1.05 - 6), 2),
-                'max': round(base_delivery_earnings * 1.05 + 6, 2),
-                'hotspot': 'Restaurant Districts',
-                'demandScore': round(delivery_demand_score, 2),
-                'tripsPerHour': round(delivery_trips, 2),
-                'surgeMultiplier': 1.0,
-                'color': '#FF8000',
-                'startTime': format_hour_to_time(target_hour),
-                'endTime': format_hour_to_time(target_hour + 1)
-            })
+            if service_filter in ['all', 'Lyft']:
+                predictions.append({
+                    'service': 'Lyft',
+                    'min': round(max(10, (base_rideshare_earnings - 5) * 0.92), 2),
+                    'max': round((base_rideshare_earnings + 5) * 0.92, 2),
+                    'hotspot': hotspot,
+                    'demandScore': round(rideshare_demand_score * 0.95, 2),
+                    'tripsPerHour': round(rideshare_trips * 0.9, 2),
+                    'surgeMultiplier': round(surge * 0.95, 2),
+                    'color': '#FF00BF',
+                    'startTime': format_hour_to_time(target_hour),
+                    'endTime': format_hour_to_time(target_hour + 1)
+                })
+
+            # Delivery services
+            if service_filter in ['all', 'DoorDash']:
+                predictions.append({
+                    'service': 'DoorDash',
+                    'min': round(max(12, base_delivery_earnings - 6), 2),
+                    'max': round(base_delivery_earnings + 6, 2),
+                    'hotspot': 'Restaurant Districts',
+                    'demandScore': round(delivery_demand_score, 2),
+                    'tripsPerHour': round(delivery_trips, 2),
+                    'surgeMultiplier': round(1.0 + (delivery_time_factor - 0.5) * 0.4, 2),
+                    'color': '#FFD700',
+                    'startTime': format_hour_to_time(target_hour),
+                    'endTime': format_hour_to_time(target_hour + 1)
+                })
+
+            if service_filter in ['all', 'UberEats']:
+                predictions.append({
+                    'service': 'UberEats',
+                    'min': round(max(12, base_delivery_earnings * 0.95 - 6), 2),
+                    'max': round(base_delivery_earnings * 0.95 + 6, 2),
+                    'hotspot': 'Restaurant Districts',
+                    'demandScore': round(delivery_demand_score * 0.95, 2),
+                    'tripsPerHour': round(delivery_trips * 0.95, 2),
+                    'surgeMultiplier': round(1.0 + (delivery_time_factor - 0.5) * 0.4, 2),
+                    'color': '#06C167',
+                    'startTime': format_hour_to_time(target_hour),
+                    'endTime': format_hour_to_time(target_hour + 1)
+                })
+
+            if service_filter in ['all', 'GrubHub']:
+                predictions.append({
+                    'service': 'GrubHub',
+                    'min': round(max(12, base_delivery_earnings * 1.05 - 6), 2),
+                    'max': round(base_delivery_earnings * 1.05 + 6, 2),
+                    'hotspot': 'Restaurant Districts',
+                    'demandScore': round(delivery_demand_score, 2),
+                    'tripsPerHour': round(delivery_trips, 2),
+                    'surgeMultiplier': 1.0,
+                    'color': '#FF8000',
+                    'startTime': format_hour_to_time(target_hour),
+                    'endTime': format_hour_to_time(target_hour + 1)
+                })
 
         response_data = {
             'location': location,
@@ -802,11 +849,14 @@ if __name__ == '__main__':
     print("=" * 60)
     print("TIP: Use /lightweight endpoint for instant UI responses!")
     print("=" * 60)
+    print("NOTE: For production, use: gunicorn --bind 0.0.0.0:$PORT api_server:app")
+    print("=" * 60)
 
     # Get port from environment variable (Railway/Heroku) or default to 5002 for local
     port = int(os.environ.get('PORT', 5002))
     # Disable debug mode in production (Railway sets RAILWAY_ENVIRONMENT)
     debug_mode = os.environ.get('RAILWAY_ENVIRONMENT') != 'production'
     
-    print(f"Starting server on port {port} (debug={debug_mode})")
+    print(f"Starting development server on port {port} (debug={debug_mode})")
+    print("WARNING: This is a development server. Use gunicorn for production!")
     app.run(host='0.0.0.0', port=port, debug=debug_mode)

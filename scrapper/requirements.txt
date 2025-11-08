@@ -31,3 +31,9 @@ selenium>=4.15.0
 
 # Utilities
 python-dotenv>=1.0.0
+
+# Production WSGI server
+gunicorn>=21.2.0
+
+# Real-time data APIs
+requests>=2.31.0  # Already listed above, but ensuring latest version

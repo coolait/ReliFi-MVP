@@ -2,11 +2,10 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "python api_server.py"
+startCommand = "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 api_server:app"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 
-# Explicitly set the entry point to prevent Railway from auto-detecting main.py
-[deploy.entrypoint]
-command = "python api_server.py"
+# Note: Railway will use the startCommand above (gunicorn) for production
+# The if __name__ block in api_server.py is only for local development
 
