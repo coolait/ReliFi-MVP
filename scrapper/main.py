@@ -69,16 +69,19 @@ class RideshareScraper:
         }
 
     def initialize_database(self):
-        """Initialize database connection and schema"""
+        """Initialize database connection and schema (optional)"""
         try:
             logger.info("Initializing database...")
             self.engine = init_database(self.database_url)
+            if self.engine is None:
+                logger.warning("No database configured - operating without database")
+                return False
             self.session = get_session(self.engine)
             logger.info("Database initialized successfully")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
+            logger.warning(f"Database not available: {e} - continuing without database")
             return False
 
     def run_scraper(self, scraper_name: str, scraper_obj) -> dict:
@@ -359,10 +362,10 @@ def main():
     # Create scraper instance
     scraper = RideshareScraper(database_url=args.db_url)
 
-    # Initialize database
+    # Initialize database (optional - only needed for scraping with storage)
     if not scraper.initialize_database():
-        logger.error("Failed to initialize database. Exiting.")
-        sys.exit(1)
+        logger.warning("Database not available - continuing without database storage")
+        # Don't exit - allow scraping without database
 
     try:
         if args.schedule:
@@ -385,4 +388,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Only run if explicitly called (not imported)
+    # This prevents Railway from accidentally running this as the entry point
+    import sys
+    if len(sys.argv) > 0 and 'api_server' not in sys.argv[0]:
+        main()
+    else:
+        print("Note: Use 'python api_server.py' to start the API server")
+        print("Use 'python main.py' to run the scraper")

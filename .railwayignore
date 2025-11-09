@@ -1,0 +1,12 @@
+# Ignore Node.js files when Railway builds
+# This helps Railway focus on Python in the scrapper directory
+node_modules/
+package.json
+package-lock.json
+client/
+server/
+api/
+*.md
+!.railwayignore
+
+

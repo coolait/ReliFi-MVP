@@ -39,10 +39,16 @@ const Calendar: React.FC<CalendarProps> = ({
   // Map a raw service name to one of the two categories
   const mapServiceToCategory = (service: string): 'Rideshare' | 'Food Delivery' => {
     const s = service.toLowerCase();
-    if (s.includes('uber') && !s.includes('eats')) return 'Rideshare';
+    // Rideshare services
+    if (s.includes('uber') && !s.includes('eats') && !s.includes('uber eats')) return 'Rideshare';
     if (s.includes('lyft')) return 'Rideshare';
     if (s.includes('rideshare')) return 'Rideshare';
-    // Everything else we consider Food Delivery for now
+    // Food Delivery services
+    if (s.includes('doordash') || s.includes('door dash')) return 'Food Delivery';
+    if (s.includes('ubereats') || s.includes('uber eats')) return 'Food Delivery';
+    if (s.includes('grubhub') || s.includes('grub hub')) return 'Food Delivery';
+    if (s.includes('food delivery') || s.includes('delivery')) return 'Food Delivery';
+    // Default to Food Delivery if unknown
     return 'Food Delivery';
   };
 
@@ -118,7 +124,12 @@ const Calendar: React.FC<CalendarProps> = ({
     setWeeklyCache(new Map());
   }, [location]);
 
-  // Fetch weekly data when week changes
+  // DISABLED: Automatic weekly data fetching on page load
+  // This was causing the scraper to run for ALL slots (7 days × 18 hours = 126 requests!)
+  // Now data is only fetched when user clicks on a specific slot
+  //
+  // If you want to re-enable automatic weekly fetching, uncomment the code below:
+  /*
   useEffect(() => {
     const fetchWeeklyData = async () => {
       const weekKey = getWeekCacheKey(currentWeek);
@@ -164,7 +175,6 @@ const Calendar: React.FC<CalendarProps> = ({
         
         if (data.weekData) {
           // Process the week data structure from API
-          // API uses lowercase day names (sunday, monday, etc.), convert to our format
           const dayNameMap: { [key: string]: string } = {
             'sunday': 'Sunday',
             'monday': 'Monday',
@@ -191,54 +201,6 @@ const Calendar: React.FC<CalendarProps> = ({
             
             weekDataMap.set(dayName, hourMap);
           });
-        } else {
-          // Generate fallback weekly data with variation
-          const weekDates = getWeekDates(currentWeek);
-          weekDates.forEach((date, index) => {
-            const dayName = days[index];
-            const hourMap = new Map<number, GigOpportunity[]>();
-            
-            hours.forEach((hour) => {
-              const hourMultiplier = hour >= 17 && hour <= 20 ? 1.3 : hour >= 11 && hour <= 14 ? 1.2 : 1.0;
-              const dayMultiplier = ['Friday', 'Saturday'].includes(dayName) ? 1.2 : 1.0;
-              const baseMultiplier = hourMultiplier * dayMultiplier;
-              
-              const baseUber = Math.round(20 * baseMultiplier);
-              const baseLyft = Math.round(18 * baseMultiplier);
-              const baseDoorDash = Math.round(15 * baseMultiplier);
-
-              const mockPreds = [
-                { 
-                  service: 'Uber', 
-                  min: baseUber, 
-                  max: Math.round(baseUber * 1.4), 
-                  color: '#4285F4', 
-                  hotspot: 'Downtown Core', 
-                  demandScore: Math.min(0.95, 0.6 + (hour % 12) * 0.03) 
-                },
-                { 
-                  service: 'Lyft', 
-                  min: baseLyft, 
-                  max: Math.round(baseLyft * 1.4), 
-                  color: '#FF00BF', 
-                  hotspot: 'Downtown Core', 
-                  demandScore: Math.min(0.92, 0.58 + (hour % 12) * 0.03) 
-                },
-                { 
-                  service: 'DoorDash', 
-                  min: baseDoorDash, 
-                  max: Math.round(baseDoorDash * 1.5), 
-                  color: '#FFD700', 
-                  hotspot: 'Restaurant Districts', 
-                  demandScore: Math.min(0.90, 0.55 + (hour % 12) * 0.03) 
-                }
-              ];
-              const recommendations = aggregateToCategories(mockPreds as any, hour);
-              hourMap.set(hour, recommendations);
-            });
-            
-            weekDataMap.set(dayName, hourMap);
-          });
         }
 
         // Cache the weekly data
@@ -251,61 +213,6 @@ const Calendar: React.FC<CalendarProps> = ({
         console.log('✅ Weekly data cached for', weekKey);
       } catch (error: any) {
         console.error('❌ Error fetching weekly data:', error);
-        // Generate fallback weekly data
-        const weekDataMap = new Map<string, Map<number, GigOpportunity[]>>();
-        const weekDates = getWeekDates(currentWeek);
-        
-        weekDates.forEach((date, index) => {
-          const dayName = days[index];
-          const hourMap = new Map<number, GigOpportunity[]>();
-          
-          hours.forEach((hour) => {
-            const hourMultiplier = hour >= 17 && hour <= 20 ? 1.3 : hour >= 11 && hour <= 14 ? 1.2 : 1.0;
-            const dayMultiplier = ['Friday', 'Saturday'].includes(dayName) ? 1.2 : 1.0;
-            const baseMultiplier = hourMultiplier * dayMultiplier;
-            
-            const baseUber = Math.round(20 * baseMultiplier);
-            const baseLyft = Math.round(18 * baseMultiplier);
-            const baseDoorDash = Math.round(15 * baseMultiplier);
-
-            const mockPreds = [
-              { 
-                service: 'Uber', 
-                min: baseUber, 
-                max: Math.round(baseUber * 1.4), 
-                color: '#4285F4', 
-                hotspot: 'Downtown Core', 
-                demandScore: Math.min(0.95, 0.6 + (hour % 12) * 0.03) 
-              },
-              { 
-                service: 'Lyft', 
-                min: baseLyft, 
-                max: Math.round(baseLyft * 1.4), 
-                color: '#FF00BF', 
-                hotspot: 'Downtown Core', 
-                demandScore: Math.min(0.92, 0.58 + (hour % 12) * 0.03) 
-              },
-              { 
-                service: 'DoorDash', 
-                min: baseDoorDash, 
-                max: Math.round(baseDoorDash * 1.5), 
-                color: '#FFD700', 
-                hotspot: 'Restaurant Districts', 
-                demandScore: Math.min(0.90, 0.55 + (hour % 12) * 0.03) 
-              }
-            ];
-            const recommendations = aggregateToCategories(mockPreds as any, hour);
-            hourMap.set(hour, recommendations);
-          });
-          
-          weekDataMap.set(dayName, hourMap);
-        });
-
-        setWeeklyCache(prev => {
-          const newCache = new Map(prev);
-          newCache.set(weekKey, weekDataMap);
-          return newCache;
-        });
       } finally {
         setWeeklyLoading(false);
       }
@@ -313,6 +220,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
     fetchWeeklyData();
   }, [currentWeek, location]);
+  */
 
   const getWeekDates = (date: Date) => {
     const startOfWeek = new Date(date);
@@ -329,22 +237,7 @@ const Calendar: React.FC<CalendarProps> = ({
   const handleSlotClick = async (day: string, hour: number) => {
     setLoading(true);
     try {
-      const weekKey = getWeekCacheKey(currentWeek);
-      
-      // Check weekly cache first (primary source)
-      if (weeklyCache.has(weekKey)) {
-        const weekData = weeklyCache.get(weekKey)!;
-        const dayData = weekData.get(day);
-        if (dayData && dayData.has(hour)) {
-          const recommendations = dayData.get(hour)!;
-          console.log('📦 Using weekly cache for', day, hour);
-          onSlotClick(day, hour.toString(), recommendations);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Fallback: Check individual cache
+      // Get the exact date for the clicked slot
       const dayIndex = days.indexOf(day);
       const slotDate = weekDates[dayIndex];
       const dateStr = slotDate.toISOString().split('T')[0];
@@ -353,6 +246,7 @@ const Calendar: React.FC<CalendarProps> = ({
         : location.cityName;
       const cacheKey = `${locationKey}-${dateStr}-${day}-${hour}`;
 
+      // Check individual cache first (faster, but only for previously clicked slots)
       if (earningsCache.has(cacheKey)) {
         console.log('📦 Using cached earnings data for', cacheKey);
         onSlotClick(day, hour.toString(), earningsCache.get(cacheKey)!);
@@ -360,89 +254,51 @@ const Calendar: React.FC<CalendarProps> = ({
         return;
       }
 
-      // If weekly data is still loading, wait a bit or use fallback
-      if (weeklyLoading) {
-        console.log('⏳ Weekly data still loading, using fallback...');
-        // Generate quick fallback
-        const hourMultiplier = hour >= 17 && hour <= 20 ? 1.3 : hour >= 11 && hour <= 14 ? 1.2 : 1.0;
-        const dayMultiplier = ['Friday', 'Saturday'].includes(day) ? 1.2 : 1.0;
-        const baseMultiplier = hourMultiplier * dayMultiplier;
-        
-        const baseUber = Math.round(20 * baseMultiplier);
-        const baseLyft = Math.round(18 * baseMultiplier);
-        const baseDoorDash = Math.round(15 * baseMultiplier);
+      // Fetch from API with the SPECIFIC date and time the user clicked
+      // This ensures we scrape events for the exact date/time, not pre-fetched data
+      console.log(`🔍 User clicked ${day} (${dateStr}) at ${hour}:00 - fetching earnings from API`);
+      
+      // Build API URL with specific date and time
+      const formatHour = (h: number) => {
+        if (h === 0) return '12:00 AM';
+        if (h < 12) return `${h}:00 AM`;
+        if (h === 12) return '12:00 PM';
+        return `${h - 12}:00 PM`;
+      };
+      
+      let apiUrl = `${API_BASE_URL}/api/earnings?`;
+      if (location.coordinates) {
+        apiUrl += `lat=${location.coordinates.lat}&lng=${location.coordinates.lng}&`;
+      } else {
+        apiUrl += `location=${encodeURIComponent(location.cityName)}&`;
+      }
+      apiUrl += `date=${dateStr}&startTime=${encodeURIComponent(formatHour(hour))}&endTime=${encodeURIComponent(formatHour(hour + 1))}`;
+      
+      console.log('📡 Calling API for specific slot:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(60000) // 1 minute timeout
+      });
 
-        const mockPreds = [
-          { 
-            service: 'Uber', 
-            min: baseUber, 
-            max: Math.round(baseUber * 1.4), 
-            color: '#4285F4', 
-            hotspot: 'Downtown Core', 
-            demandScore: Math.min(0.95, 0.6 + (hour % 12) * 0.03) 
-          },
-          { 
-            service: 'Lyft', 
-            min: baseLyft, 
-            max: Math.round(baseLyft * 1.4), 
-            color: '#FF00BF', 
-            hotspot: 'Downtown Core', 
-            demandScore: Math.min(0.92, 0.58 + (hour % 12) * 0.03) 
-          },
-          { 
-            service: 'DoorDash', 
-            min: baseDoorDash, 
-            max: Math.round(baseDoorDash * 1.5), 
-            color: '#FFD700', 
-            hotspot: 'Restaurant Districts', 
-            demandScore: Math.min(0.90, 0.55 + (hour % 12) * 0.03) 
-          }
-        ];
-        const fallbackRecommendations = aggregateToCategories(mockPreds as any, hour);
-        onSlotClick(day, hour.toString(), fallbackRecommendations);
-        setLoading(false);
-        return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // If we get here, weekly data should have been loaded but slot not found
-      // This shouldn't happen, but generate fallback just in case
-      console.warn('⚠️ Slot not found in weekly cache, generating fallback');
-      const hourMultiplier = hour >= 17 && hour <= 20 ? 1.3 : hour >= 11 && hour <= 14 ? 1.2 : 1.0;
-      const dayMultiplier = ['Friday', 'Saturday'].includes(day) ? 1.2 : 1.0;
-      const baseMultiplier = hourMultiplier * dayMultiplier;
+      const data = await response.json();
+      console.log('✅ Received API response:', data);
       
-      const baseUber = Math.round(20 * baseMultiplier);
-      const baseLyft = Math.round(18 * baseMultiplier);
-      const baseDoorDash = Math.round(15 * baseMultiplier);
-
-      const mockPreds = [
-        { 
-          service: 'Uber', 
-          min: baseUber, 
-          max: Math.round(baseUber * 1.4), 
-          color: '#4285F4', 
-          hotspot: 'Downtown Core', 
-          demandScore: Math.min(0.95, 0.6 + (hour % 12) * 0.03) 
-        },
-        { 
-          service: 'Lyft', 
-          min: baseLyft, 
-          max: Math.round(baseLyft * 1.4), 
-          color: '#FF00BF', 
-          hotspot: 'Downtown Core', 
-          demandScore: Math.min(0.92, 0.58 + (hour % 12) * 0.03) 
-        },
-        { 
-          service: 'DoorDash', 
-          min: baseDoorDash, 
-          max: Math.round(baseDoorDash * 1.5), 
-          color: '#FFD700', 
-          hotspot: 'Restaurant Districts', 
-          demandScore: Math.min(0.90, 0.55 + (hour % 12) * 0.03) 
-        }
-      ];
-      const fallbackRecommendations = aggregateToCategories(mockPreds as any, hour);
-      onSlotClick(day, hour.toString(), fallbackRecommendations);
+      // Convert API response to our format
+      const predictions = data.predictions || [];
+      const recommendations = aggregateToCategories(predictions, hour);
+      
+      // Cache the results
+      setEarningsCache(prev => {
+        const newCache = new Map(prev);
+        newCache.set(cacheKey, recommendations);
+        return newCache;
+      });
+      
+      onSlotClick(day, hour.toString(), recommendations);
     } catch (error: any) {
       console.error('❌ Error in handleSlotClick:', error);
       // Fallback to basic estimates
