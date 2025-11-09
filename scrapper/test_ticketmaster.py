@@ -22,7 +22,7 @@ def test_ticketmaster_api():
     if not api_key:
         print("❌ TICKETMASTER_API_KEY not found in environment variables")
         print("   Please add it to your .env file:")
-        print("   TICKETMASTER_API_KEY=your_consumer_key_here")
+        print("   TICKETMASTER_API_KEY=your_consumer_key_here") 
         return
     
     print(f"✅ Found Consumer Key: {api_key[:10]}...{api_key[-5:]}")
